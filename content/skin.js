@@ -111,6 +111,13 @@
         const buf = video.buffered.end(video.buffered.length - 1);
         ui.seekBuffer.style.width = (dur ? (buf / dur) * 100 : 0) + '%';
       }
+
+      /* chapter marker colours */
+      if (dur > 0) {
+        chapterMarkerEls.forEach(el => {
+          el.classList.toggle('played', parseFloat(el.style.left) < pct);
+        });
+      }
     }
     video.addEventListener('timeupdate', updateProgress);
     video.addEventListener('loadedmetadata', updateProgress);
@@ -235,12 +242,25 @@
     });
 
     /* ---- volume / mute ---- */
+
+    /* Restore saved volume */
+    chrome.storage.local.get(['volume', 'muted'], (r) => {
+      if (typeof r.volume === 'number') video.volume = r.volume;
+      if (typeof r.muted === 'boolean') video.muted = r.muted;
+    });
+
+    let volSaveTimer;
     function syncVolBtn() {
       ui.btnVol.innerHTML = volIcon(video.volume, video.muted);
       const pct = video.muted ? 0 : Math.round(video.volume * 100);
       ui.volSliderFill.style.height = pct + '%';
       ui.volSliderThumb.style.bottom = pct + '%';
       ui.volLabel.textContent = pct + '%';
+      /* Debounced save */
+      clearTimeout(volSaveTimer);
+      volSaveTimer = setTimeout(() => {
+        chrome.storage.local.set({ volume: video.volume, muted: video.muted });
+      }, 500);
     }
     video.addEventListener('volumechange', syncVolBtn);
     syncVolBtn();
@@ -365,11 +385,12 @@
     });
 
     /* close menus helper */
+    let chapPinned = false;
     function closeAllMenus() {
       ui.ccMenu.classList.remove('visible');
       ui.hdMenu.classList.remove('visible');
       ui.speedMenu.classList.remove('visible');
-      ui.chapMenu.classList.remove('visible');
+      if (!chapPinned) ui.chapMenu.classList.remove('visible');
     }
 
     /* close menus when clicking elsewhere */
@@ -493,7 +514,7 @@
         item.addEventListener('click', (e) => {
           e.stopPropagation();
           video.currentTime = ch.startTime;
-          closeAllMenus();
+          if (!chapPinned) closeAllMenus();
         });
         ui.chapMenuList.append(item);
       });
@@ -507,6 +528,71 @@
         buildChaptersMenu();
         ui.chapMenu.classList.add('visible');
       }
+    });
+
+    /* ---- Chapter menu pin + drag ---- */
+    function unpinChapMenu() {
+      chapPinned = false;
+      ui.chapMenu.classList.remove('pinned', 'visible');
+      ui.btnChapPin.classList.remove('active');
+      ui.btnChapPin.title = 'Pin chapters panel';
+      ui.chapMenu.style.cssText = '';
+      /* Move menu back into its original chapWrap */
+      ui.chapWrap.appendChild(ui.chapMenu);
+    }
+
+    ui.btnChapPin.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (chapPinned) {
+        unpinChapMenu();
+      } else {
+        chapPinned = true;
+        /* Compute position relative to player before reparenting */
+        const menuRect = ui.chapMenu.getBoundingClientRect();
+        const playerRect = player.getBoundingClientRect();
+        const left = menuRect.left - playerRect.left;
+        const top = menuRect.top - playerRect.top;
+        /* Reparent into player so position: absolute is player-relative */
+        player.appendChild(ui.chapMenu);
+        ui.chapMenu.style.position = 'absolute';
+        ui.chapMenu.style.left = left + 'px';
+        ui.chapMenu.style.top = top + 'px';
+        ui.chapMenu.style.bottom = 'auto';
+        ui.chapMenu.style.transform = 'none';
+        ui.chapMenu.style.margin = '0';
+        ui.chapMenu.classList.add('pinned', 'visible');
+        ui.btnChapPin.classList.add('active');
+        ui.btnChapPin.title = 'Unpin chapters panel';
+      }
+    });
+
+    /* Drag behaviour on the header */
+    ui.chapMenuHeader.addEventListener('mousedown', (e) => {
+      if (!chapPinned) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const startX = e.clientX;
+      const startY = e.clientY;
+      const startLeft = parseInt(ui.chapMenu.style.left) || 0;
+      const startTop = parseInt(ui.chapMenu.style.top) || 0;
+
+      const onMove = (ev) => {
+        const playerRect = player.getBoundingClientRect();
+        const menuRect = ui.chapMenu.getBoundingClientRect();
+        let newLeft = startLeft + (ev.clientX - startX);
+        let newTop = startTop + (ev.clientY - startY);
+        /* Clamp within player bounds */
+        newLeft = Math.max(0, Math.min(playerRect.width - menuRect.width, newLeft));
+        newTop = Math.max(0, Math.min(playerRect.height - menuRect.height, newTop));
+        ui.chapMenu.style.left = newLeft + 'px';
+        ui.chapMenu.style.top = newTop + 'px';
+      };
+      const onUp = () => {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+      };
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
     });
 
     /* ---- Chapter markers on seek bar ---- */

@@ -785,6 +785,63 @@
   max-height: 320px;
 }
 
+/* Pinned state */
+.ytp-skin-chap-menu.pinned {
+  background: rgba(15,15,15,0.35);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  max-height: 400px;
+  z-index: 100;
+  margin-bottom: 0;
+}
+
+/* Header bar (title + pin button) */
+.ytp-skin-menu-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 14px 2px;
+  cursor: default;
+}
+
+.ytp-skin-chap-menu.pinned .ytp-skin-menu-header {
+  cursor: grab;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  margin-bottom: 4px;
+}
+
+.ytp-skin-chap-menu.pinned .ytp-skin-menu-header:active {
+  cursor: grabbing;
+}
+
+.ytp-skin-chap-pin {
+  background: none;
+  border: none;
+  color: rgba(255,255,255,0.35);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+  line-height: 1;
+  transition: color 0.15s, background 0.15s;
+  flex-shrink: 0;
+}
+
+.ytp-skin-chap-pin:hover {
+  color: #fff;
+  background: rgba(255,255,255,0.1);
+}
+
+.ytp-skin-chap-pin.active {
+  color: #e53935;
+}
+
+.ytp-skin-menu-header .ytp-skin-menu-title {
+  padding: 0;
+  border-bottom: none;
+  margin-bottom: 0;
+}
+
 .ytp-skin-chap-item {
   gap: 10px !important;
 }
@@ -824,8 +881,17 @@
   transform: translateX(-50%);
   z-index: 1;
   border-radius: 1px;
+  transition: background 0.1s ease;
+}
+
+.ytp-skin-chap-marker.played {
+  background: rgba(229,57,53,0.8);
 }
 
 .ytp-skin-seek:hover .ytp-skin-chap-marker {
   background: rgba(255,255,255,0.7);
+}
+
+.ytp-skin-seek:hover .ytp-skin-chap-marker.played {
+  background: rgba(229,57,53,1);
 }

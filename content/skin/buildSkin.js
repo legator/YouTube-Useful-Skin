@@ -67,9 +67,13 @@ export function buildSkin() {
   const btnChapters = ce('button', 'ytp-skin-btn ytp-skin-btn-chapters', ICONS.chapters);
   btnChapters.title = 'Chapters';
   const chapMenu = ce('div', 'ytp-skin-menu ytp-skin-chap-menu');
+  const chapMenuHeader = ce('div', 'ytp-skin-menu-header');
   const chapMenuTitle = ce('div', 'ytp-skin-menu-title', 'Chapters');
+  const btnChapPin = ce('button', 'ytp-skin-chap-pin', '📌');
+  btnChapPin.title = 'Pin chapters panel';
+  chapMenuHeader.append(chapMenuTitle, btnChapPin);
   const chapMenuList = ce('div', 'ytp-skin-menu-list');
-  chapMenu.append(chapMenuTitle, chapMenuList);
+  chapMenu.append(chapMenuHeader, chapMenuList);
   chapWrap.append(btnChapters, chapMenu);
 
   const btnSkipBack = ce('button', 'ytp-skin-btn ytp-skin-btn-skip', ICONS.replay10);
@@ -118,7 +122,7 @@ export function buildSkin() {
     badgeCC, ccMenu, ccMenuList,
     badgeHD, hdMenu, hdMenuList,
     badgeSpeed, speedMenu, speedMenuList,
-    btnChapters, chapMenu, chapMenuList,
+    btnChapters, chapMenu, chapMenuList, chapMenuHeader, btnChapPin, chapWrap,
     btnSkipBack, btnPlay, btnSkipFwd,
     btnTheater, btnMini, btnFS,
     timeLeft, timeRight,
