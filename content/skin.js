@@ -613,8 +613,13 @@
     let bridgeMsgId = 0;
     const bridgeCallbacks = new Map();
 
+    /* Resolves when the bridge module finishes loading (ytp-skin-bridge-ready) */
+    let _bridgeReadyResolve;
+    const bridgeReady = new Promise(res => { _bridgeReadyResolve = res; });
+
     window.addEventListener('message', (e) => {
       if (e.source !== window) return;
+      if (e.data?.source === 'ytp-skin-bridge-ready') { _bridgeReadyResolve(); return; }
       if (!e.data || e.data.source !== 'ytp-skin-response') return;
       const cb = bridgeCallbacks.get(e.data.id);
       if (cb) {
@@ -624,7 +629,7 @@
     });
 
     function bridgeCall(action, payload) {
-      return new Promise((resolve) => {
+      return bridgeReady.then(() => new Promise((resolve) => {
         const id = ++bridgeMsgId;
         bridgeCallbacks.set(id, resolve);
         window.postMessage({ source: 'ytp-skin-request', action, payload, id }, '*');
@@ -635,7 +640,7 @@
             resolve(null);
           }
         }, 2000);
-      });
+      }));
     }
 
     /* ---- CC / Subtitles menu ---- */
@@ -1740,6 +1745,7 @@
     if (document.getElementById('ytp-skin-bridge')) return;
     const s = document.createElement('script');
     s.id = 'ytp-skin-bridge';
+    s.type = 'module';
     s.src = chrome.runtime.getURL('content/bridge.js');
     (document.head || document.documentElement).appendChild(s);
   }
