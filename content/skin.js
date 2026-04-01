@@ -124,6 +124,10 @@
           el.classList.toggle('played', parseFloat(el.style.left) < pct);
         });
       }
+
+      /* current chapter name */
+      const activeChap = getChapterAtTime(cur);
+      ui.chapNameEl.textContent = activeChap ? activeChap.title : '';
     }
     video.addEventListener('timeupdate', updateProgress);
     video.addEventListener('loadedmetadata', updateProgress);
@@ -332,8 +336,20 @@
       renderCCItems(
         ui.ccMenuList, document, 'ytp-skin-menu-item', 'ytp-skin-menu-check',
         result.tracks, result.current,
-        () => { bridgeCall('setCaptions', { track: {} }); ui.badgeCC.classList.remove('active'); closeAllMenus(); },
-        (t) => { bridgeCall('setCaptions', { track: t }); ui.badgeCC.classList.add('active'); closeAllMenus(); }
+        () => {
+          bridgeCall('setCaptions', { track: {} });
+          ui.badgeCC.classList.remove('active');
+          const vid = getVideoId();
+          if (vid) chrome.storage.local.set({ [`cc_${vid}`]: null });
+          closeAllMenus();
+        },
+        (t) => {
+          bridgeCall('setCaptions', { track: t });
+          ui.badgeCC.classList.add('active');
+          const vid = getVideoId();
+          if (vid && t.languageCode) chrome.storage.local.set({ [`cc_${vid}`]: t.languageCode });
+          closeAllMenus();
+        }
       );
     }
 
@@ -464,6 +480,27 @@
 
     video.addEventListener('ratechange', syncSpeedBadge);
     syncSpeedBadge();
+
+    /* Persist speed per video ID */
+    function getVideoId() {
+      return new URLSearchParams(location.search).get('v') || '';
+    }
+    video.addEventListener('ratechange', () => {
+      const vid = getVideoId();
+      if (!vid) return;
+      chrome.storage.local.set({ [`speed_${vid}`]: video.playbackRate });
+    });
+    /* Restore speed when a new video loads */
+    video.addEventListener('loadedmetadata', () => {
+      const vid = getVideoId();
+      if (!vid) return;
+      chrome.storage.local.get([`speed_${vid}`], (r) => {
+        const saved = r[`speed_${vid}`];
+        if (typeof saved === 'number' && saved !== video.playbackRate) {
+          video.playbackRate = saved;
+        }
+      });
+    });
 
     /* ---- Chapters / Timecodes menu ---- */
     let cachedChapters = [];
@@ -627,11 +664,16 @@
     /* Load chapters on init and render markers */
     async function initChapters() {
       const chapters = await loadChapters();
-      if (chapters.length > 0) {
+      const hasChap = chapters.length > 0;
+      if (hasChap) {
         renderChapterMarkers(chapters);
         ui.btnChapters.style.display = '';
+        ui.btnChapPrev.style.display = '';
+        ui.btnChapNext.style.display = '';
       } else {
         ui.btnChapters.style.display = 'none';
+        ui.btnChapPrev.style.display = 'none';
+        ui.btnChapNext.style.display = 'none';
       }
     }
     /* Delay a bit to ensure player response is available */
@@ -656,6 +698,24 @@
     updateQualityBadge();
     video.addEventListener('loadeddata', () => setTimeout(updateQualityBadge, 1000));
 
+    /* Restore saved CC language for this video */
+    async function restoreSavedCC() {
+      const vid = getVideoId();
+      if (!vid) return;
+      chrome.storage.local.get([`cc_${vid}`], async (r) => {
+        const savedCode = r[`cc_${vid}`];
+        if (!savedCode) return;
+        const result = await bridgeCall('getCaptions', {});
+        if (!result || !result.tracks) return;
+        const track = result.tracks.find(t => t.languageCode === savedCode);
+        if (track) {
+          bridgeCall('setCaptions', { track });
+          ui.badgeCC.classList.add('active');
+        }
+      });
+    }
+    video.addEventListener('loadeddata', () => setTimeout(restoreSavedCC, 1500));
+
     /* ---- theater mode ---- */
     ui.btnTheater.addEventListener('click', () => {
       const tb = qs('.ytp-size-button', player);
@@ -669,6 +729,25 @@
 
     ui.btnSkipFwd.addEventListener('click', () => {
       video.currentTime = Math.min(video.duration || 0, video.currentTime + SKIP_SECONDS);
+    });
+
+    ui.btnChapPrev.addEventListener('click', () => {
+      if (cachedChapters.length === 0) return;
+      const cur = video.currentTime;
+      /* If more than 3 s into current chapter, restart it; else go to previous */
+      let target = 0;
+      for (let i = cachedChapters.length - 1; i >= 0; i--) {
+        if (cur - cachedChapters[i].startTime > 3) { target = cachedChapters[i].startTime; break; }
+        if (i > 0 && cur > cachedChapters[i].startTime) { target = cachedChapters[i - 1].startTime; break; }
+      }
+      video.currentTime = target;
+    });
+
+    ui.btnChapNext.addEventListener('click', () => {
+      if (cachedChapters.length === 0) return;
+      const cur = video.currentTime;
+      const next = cachedChapters.find(ch => ch.startTime > cur + 0.5);
+      if (next) video.currentTime = next.startTime;
     });
 
     /* ---- Picture-in-Picture ---- */

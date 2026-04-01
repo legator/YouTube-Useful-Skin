@@ -518,6 +518,30 @@
   letter-spacing: 0.4px;
 }
 
+/* --- Chapter name strip (above seek bar) --- */
+.ytp-skin-chap-name {
+  width: 100%;
+  padding: 0 14px 2px 14px;
+  box-sizing: border-box;
+  color: rgba(255,255,255,0.75);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+  min-height: 14px;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.6);
+  transition: opacity 0.2s ease;
+}
+
+/* Prev/next chapter buttons — hidden until chapters are available */
+.ytp-skin-btn-chap-prev,
+.ytp-skin-btn-chap-next {
+  display: none;
+}
+
 /* --- Progress / Seek Bar --- */
 .ytp-skin-progress-wrap {
   width: 100%;

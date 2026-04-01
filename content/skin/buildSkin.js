@@ -76,6 +76,9 @@ export function buildSkin() {
   chapMenu.append(chapMenuHeader, chapMenuList);
   chapWrap.append(btnChapters, chapMenu);
 
+  const btnChapPrev = ce('button', 'ytp-skin-btn ytp-skin-btn-skip ytp-skin-btn-chap-prev', ICONS.chapPrev);
+  btnChapPrev.title = 'Previous chapter';
+
   const btnSkipBack = ce('button', 'ytp-skin-btn ytp-skin-btn-skip', ICONS.replay10);
   btnSkipBack.title = 'Back 10s';
 
@@ -84,6 +87,9 @@ export function buildSkin() {
 
   const btnSkipFwd = ce('button', 'ytp-skin-btn ytp-skin-btn-skip', ICONS.forward10);
   btnSkipFwd.title = 'Forward 10s';
+
+  const btnChapNext = ce('button', 'ytp-skin-btn ytp-skin-btn-skip ytp-skin-btn-chap-next', ICONS.chapNext);
+  btnChapNext.title = 'Next chapter';
 
   const btnTheater = ce('button', 'ytp-skin-btn ytp-skin-btn-square', ICONS.theaterMode);
   btnTheater.title = 'Theater mode';
@@ -94,10 +100,11 @@ export function buildSkin() {
   const btnFS = ce('button', 'ytp-skin-btn ytp-skin-btn-square', ICONS.fullscreen);
   btnFS.title = 'Full screen';
 
-  controls.append(volWrap, ccWrap, hdWrap, speedWrap, chapWrap, btnSkipBack, btnPlay, btnSkipFwd, btnTheater, btnMini, btnFS);
+  controls.append(volWrap, ccWrap, hdWrap, speedWrap, chapWrap, btnChapPrev, btnSkipBack, btnPlay, btnSkipFwd, btnChapNext, btnTheater, btnMini, btnFS);
 
   /* seek / progress row */
   const progressWrap = ce('div', 'ytp-skin-progress-wrap');
+  const chapNameEl = ce('div', 'ytp-skin-chap-name');
   const timeLeft = ce('span', 'ytp-skin-time ytp-skin-time-left', '0:00');
   const timeRight = ce('span', 'ytp-skin-time ytp-skin-time-right', '0:00');
   const seekArea = ce('div', 'ytp-skin-seek');
@@ -112,8 +119,7 @@ export function buildSkin() {
   seekTrack.append(seekBuffer, seekFill, seekThumb);
   seekArea.append(seekTrack, seekPreview, seekTooltip);
   progressWrap.append(timeLeft, seekArea, timeRight);
-
-  bottomBar.append(controls, progressWrap);
+  bottomBar.append(controls, chapNameEl, progressWrap);
 
   return {
     topBar, bottomBar,
@@ -123,6 +129,7 @@ export function buildSkin() {
     badgeHD, hdMenu, hdMenuList,
     badgeSpeed, speedMenu, speedMenuList,
     btnChapters, chapMenu, chapMenuList, chapMenuHeader, btnChapPin, chapWrap,
+    btnChapPrev, btnChapNext, chapNameEl,
     btnSkipBack, btnPlay, btnSkipFwd,
     btnTheater, btnMini, btnFS,
     timeLeft, timeRight,
