@@ -65,6 +65,12 @@
 
 /* ===== CUSTOM SKIN OVERLAY ===== */
 
+.ytp-skin-top-bar,
+.ytp-skin-bottom-bar,
+.ytp-skin-menu {
+  font-family: 'Segoe UI', Roboto, Arial, sans-serif;
+}
+
 /* --- Top Bar --- */
 .ytp-skin-top-bar {
   position: absolute;
@@ -80,7 +86,6 @@
   pointer-events: none;
   opacity: 0;
   transition: opacity 0.3s ease;
-  font-family: 'Segoe UI', Roboto, Arial, sans-serif;
 }
 
 .html5-video-player:hover .ytp-skin-top-bar,
@@ -138,7 +143,6 @@
   opacity: 0;
   transition: opacity 0.3s ease;
   padding-bottom: 0;
-  font-family: 'Segoe UI', Roboto, Arial, sans-serif;
 }
 
 .html5-video-player:hover .ytp-skin-bottom-bar,
@@ -210,10 +214,6 @@
   height: 28px;
   fill: #fff;
   margin-left: 3px;  /* optical centre for play triangle */
-}
-
-.ytp-skin-btn-play.paused svg {
-  margin-left: 3px;
 }
 
 .ytp-skin-btn-play.playing svg {
@@ -427,7 +427,6 @@
   overflow-y: auto;
   overflow-x: hidden;
   z-index: 80;
-  font-family: 'Segoe UI', Roboto, Arial, sans-serif;
 }
 
 .ytp-skin-menu.visible {

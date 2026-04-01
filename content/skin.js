@@ -19,8 +19,6 @@
     fullscreen: `<svg viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>`,
     fullscreenExit: `<svg viewBox="0 0 24 24"><path d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z"/></svg>`,
     stop: `<svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>`,
-    skipBack: `<svg viewBox="0 0 24 24"><path d="M11 18V6l-8.5 6 8.5 6zm.5-6l8.5 6V6l-8.5 6z"/></svg>`,
-    skipFwd: `<svg viewBox="0 0 24 24"><path d="M4 18l8.5-6L4 6v12zm9-12v12l8.5-6L13 6z"/></svg>`,
     replay10: `<svg viewBox="0 0 24 24"><path d="M11.99 5V1l-5 5 5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6h-2c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/><text x="10" y="16.5" font-size="7.5" font-weight="700" fill="currentColor" text-anchor="middle" font-family="Arial">10</text></svg>`,
     forward10: `<svg viewBox="0 0 24 24"><path d="M11.99 5V1l5 5-5 5V7c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6h2c0 4.42-3.58 8-8 8s-8-3.58-8-8 3.58-8 8-8z"/><text x="14" y="16.5" font-size="7.5" font-weight="700" fill="currentColor" text-anchor="middle" font-family="Arial">10</text></svg>`,
     pipActive: `<svg viewBox="0 0 24 24"><path d="M19 7h-8v6h8V7zm2-4H3c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H3V5h18v14z"/><rect x="11" y="7" width="8" height="6" fill="currentColor" opacity="0.5"/></svg>`,
@@ -47,6 +45,11 @@
     const sec = Math.floor(s % 60);
     if (h > 0) return h + ':' + String(m).padStart(2, '0') + ':' + String(sec).padStart(2, '0');
     return m + ':' + String(sec).padStart(2, '0');
+  };
+  const volIcon = (volume, muted) => {
+    if (muted || volume === 0) return ICONS.volumeMute;
+    if (volume < 0.5) return ICONS.volumeLow;
+    return ICONS.volumeHigh;
   };
 
   /* ---- state ---- */
@@ -180,6 +183,94 @@
     };
   }
 
+  /* ---- shared drag helper for seek bars ---- */
+  function attachSeekDrag(areaEl, trackEl, fillEl, thumbEl, docRef, video, onStart, onEnd, tooltipEl) {
+    function pctFrom(e) {
+      const r = trackEl.getBoundingClientRect();
+      return Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
+    }
+    areaEl.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      onStart();
+      const p0 = pctFrom(e);
+      video.currentTime = p0 * (video.duration || 0);
+      fillEl.style.width = (p0 * 100) + '%';
+      thumbEl.style.left = (p0 * 100) + '%';
+      const onMove = (ev) => {
+        const p = pctFrom(ev);
+        fillEl.style.width = (p * 100) + '%';
+        thumbEl.style.left = (p * 100) + '%';
+        if (tooltipEl) {
+          tooltipEl.textContent = fmtTime(p * (video.duration || 0));
+          tooltipEl.style.left = (p * 100) + '%';
+        }
+        video.currentTime = p * (video.duration || 0);
+      };
+      const onUp = () => {
+        onEnd();
+        docRef.removeEventListener('mousemove', onMove);
+        docRef.removeEventListener('mouseup', onUp);
+      };
+      docRef.addEventListener('mousemove', onMove);
+      docRef.addEventListener('mouseup', onUp);
+    });
+  }
+
+  /* ---- shared CC/subtitle item renderer ---- */
+  function renderCCItems(containerEl, doc, itemCls, checkCls, tracks, current, onOff, onSelect) {
+    const offItem = doc.createElement('div');
+    offItem.className = itemCls + (!current?.languageCode ? ' active' : '');
+    offItem.innerHTML = `<span class="${checkCls}">${ICONS.check}</span><span>Off</span>`;
+    offItem.addEventListener('click', (e) => { e.stopPropagation(); onOff(); });
+    containerEl.append(offItem);
+    if (!tracks?.length) {
+      const noItem = doc.createElement('div');
+      noItem.className = itemCls + ' disabled';
+      noItem.textContent = 'No subtitles available';
+      containerEl.append(noItem);
+      return;
+    }
+    tracks.forEach((t) => {
+      const item = doc.createElement('div');
+      item.className = itemCls + (current?.languageCode === t.languageCode ? ' active' : '');
+      item.innerHTML = `<span class="${checkCls}">${ICONS.check}</span><span>${t.displayName || t.languageName || t.languageCode || 'Unknown'}</span>`;
+      item.addEventListener('click', (e) => { e.stopPropagation(); onSelect(t); });
+      containerEl.append(item);
+    });
+  }
+
+  /* ---- shared quality item renderer ---- */
+  const HD_QUALITIES = ['hd720', 'hd1080', 'hd1440', 'hd2160', 'highres'];
+  function renderQualityItems(containerEl, doc, itemCls, checkCls, hdTagCls, levels, current, qualityData, onSelect) {
+    let qLevels = levels;
+    if (qualityData?.length > 0) {
+      qLevels = qualityData.map(qd => qd.quality || qd.qualityLabel).filter(Boolean);
+      const seen = new Set();
+      qLevels = qLevels.filter(q => { if (seen.has(q)) return false; seen.add(q); return true; });
+    }
+    if (!qLevels?.length) {
+      const noItem = doc.createElement('div');
+      noItem.className = itemCls + ' disabled';
+      noItem.textContent = 'Not available';
+      containerEl.append(noItem);
+      return;
+    }
+    const autoItem = doc.createElement('div');
+    autoItem.className = itemCls + (current === 'auto' || !current ? ' active' : '');
+    autoItem.innerHTML = `<span class="${checkCls}">${ICONS.check}</span><span>Auto</span>`;
+    autoItem.addEventListener('click', (e) => { e.stopPropagation(); onSelect('auto'); });
+    containerEl.append(autoItem);
+    qLevels.forEach((q) => {
+      if (q === 'auto') return;
+      const item = doc.createElement('div');
+      const label = QUALITY_LABELS[q] || q;
+      item.className = itemCls + (q === current ? ' active' : '');
+      item.innerHTML = `<span class="${checkCls}">${ICONS.check}</span><span>${label}</span>${HD_QUALITIES.includes(q) ? `<span class="${hdTagCls}">HD</span>` : ''}`;
+      item.addEventListener('click', (e) => { e.stopPropagation(); onSelect(q); });
+      containerEl.append(item);
+    });
+  }
+
   /* ==========================================================
      injectSkin – main entry: find the player and wire everything
      ========================================================== */
@@ -235,41 +326,13 @@
     video.addEventListener('durationchange', updateProgress);
 
     /* ---- seek interaction ---- */
-    function seekFromEvent(e) {
-      const rect = ui.seekTrack.getBoundingClientRect();
-      let pct = (e.clientX - rect.left) / rect.width;
-      pct = Math.max(0, Math.min(1, pct));
-      return pct;
-    }
-
-    ui.seekArea.addEventListener('mousedown', (e) => {
-      e.preventDefault();
-      seeking = true;
-      const pct = seekFromEvent(e);
-      video.currentTime = pct * (video.duration || 0);
-      ui.seekFill.style.width = (pct * 100) + '%';
-      ui.seekThumb.style.left = (pct * 100) + '%';
-
-      const onMove = (ev) => {
-        const p = seekFromEvent(ev);
-        ui.seekFill.style.width = (p * 100) + '%';
-        ui.seekThumb.style.left = (p * 100) + '%';
-        ui.seekTooltip.textContent = fmtTime(p * (video.duration || 0));
-        ui.seekTooltip.style.left = (p * 100) + '%';
-        video.currentTime = p * (video.duration || 0);
-      };
-      const onUp = () => {
-        seeking = false;
-        document.removeEventListener('mousemove', onMove);
-        document.removeEventListener('mouseup', onUp);
-      };
-      document.addEventListener('mousemove', onMove);
-      document.addEventListener('mouseup', onUp);
-    });
+    attachSeekDrag(
+      ui.seekArea, ui.seekTrack, ui.seekFill, ui.seekThumb, document, video,
+      () => { seeking = true; }, () => { seeking = false; }, ui.seekTooltip
+    );
 
     /* ---- Storyboard thumbnail preview helpers ---- */
     let storyboardData = null;
-    let storyboardLoaded = false;
 
     function parseStoryboardSpec(spec) {
       if (!spec) return null;
@@ -383,7 +446,6 @@
           const img = new Image();
           img.onload = () => {
             storyboardData = parsed;
-            storyboardLoaded = true;
             console.log('[YTP-Skin] Storyboard ready:', parsed.w + 'x' + parsed.h,
                         parsed.totalThumbnails, 'frames');
           };
@@ -391,7 +453,6 @@
             /* Image failed — still keep the parsed data; the URL might work for
                individual frames even if sheet 0 is temporarily unavailable. */
             storyboardData = parsed;
-            storyboardLoaded = true;
             console.warn('[YTP-Skin] Storyboard sheet 0 failed to preload, keeping data anyway');
           };
           img.src = testUrl;
@@ -406,7 +467,6 @@
         setTimeout(loadStoryboard, 3000);
       } else {
         console.warn('[YTP-Skin] Storyboard unavailable after 5 retries');
-        storyboardLoaded = true; /* Give up */
       }
     }
 
@@ -438,7 +498,6 @@
     setTimeout(loadStoryboard, 2000);
     video.addEventListener('loadeddata', () => {
       /* Reset for new video */
-      storyboardLoaded = false;
       storyboardData = null;
       storyboardRetries = 0;
       setTimeout(loadStoryboard, 1500);
@@ -485,13 +544,7 @@
 
     /* ---- volume / mute ---- */
     function syncVolBtn() {
-      if (video.muted || video.volume === 0) {
-        ui.btnVol.innerHTML = ICONS.volumeMute;
-      } else if (video.volume < 0.5) {
-        ui.btnVol.innerHTML = ICONS.volumeLow;
-      } else {
-        ui.btnVol.innerHTML = ICONS.volumeHigh;
-      }
+      ui.btnVol.innerHTML = volIcon(video.volume, video.muted);
       const pct = video.muted ? 0 : Math.round(video.volume * 100);
       ui.volSliderFill.style.height = pct + '%';
       ui.volSliderThumb.style.bottom = pct + '%';
@@ -601,59 +654,24 @@
 
     async function buildCCMenu() {
       ui.ccMenuList.innerHTML = '';
-
-      /* Show loading state */
-      const loadingItem = ce('div', 'ytp-skin-menu-item disabled');
-      loadingItem.textContent = 'Loading...';
-      ui.ccMenuList.append(loadingItem);
+      const loading = ce('div', 'ytp-skin-menu-item disabled');
+      loading.textContent = 'Loading...';
+      ui.ccMenuList.append(loading);
 
       const result = await bridgeCall('getCaptions', {});
       ui.ccMenuList.innerHTML = '';
-
       if (!result) {
-        const errItem = ce('div', 'ytp-skin-menu-item disabled');
-        errItem.textContent = 'Could not load subtitles';
-        ui.ccMenuList.append(errItem);
+        const err = ce('div', 'ytp-skin-menu-item disabled');
+        err.textContent = 'Could not load subtitles';
+        ui.ccMenuList.append(err);
         return;
       }
-
-      const { tracks, current } = result;
-
-      /* "Off" option */
-      const offItem = ce('div', 'ytp-skin-menu-item');
-      offItem.innerHTML = `<span class="ytp-skin-menu-check">${ICONS.check}</span><span>Off</span>`;
-      if (!current || !current.languageCode) offItem.classList.add('active');
-      offItem.addEventListener('click', (e) => {
-        e.stopPropagation();
-        bridgeCall('setCaptions', { track: {} });
-        ui.badgeCC.classList.remove('active');
-        closeAllMenus();
-      });
-      ui.ccMenuList.append(offItem);
-
-      if (!tracks || tracks.length === 0) {
-        const noItem = ce('div', 'ytp-skin-menu-item disabled');
-        noItem.textContent = 'No subtitles available';
-        ui.ccMenuList.append(noItem);
-        return;
-      }
-
-      tracks.forEach((t) => {
-        const item = ce('div', 'ytp-skin-menu-item');
-        const label = t.displayName || t.languageName || t.languageCode || 'Unknown';
-        item.innerHTML = `<span class="ytp-skin-menu-check">${ICONS.check}</span><span>${label}</span>`;
-
-        const isActive = current && current.languageCode === t.languageCode;
-        if (isActive) item.classList.add('active');
-
-        item.addEventListener('click', (e) => {
-          e.stopPropagation();
-          bridgeCall('setCaptions', { track: t });
-          ui.badgeCC.classList.add('active');
-          closeAllMenus();
-        });
-        ui.ccMenuList.append(item);
-      });
+      renderCCItems(
+        ui.ccMenuList, document, 'ytp-skin-menu-item', 'ytp-skin-menu-check',
+        result.tracks, result.current,
+        () => { bridgeCall('setCaptions', { track: {} }); ui.badgeCC.classList.remove('active'); closeAllMenus(); },
+        (t) => { bridgeCall('setCaptions', { track: t }); ui.badgeCC.classList.add('active'); closeAllMenus(); }
+      );
     }
 
     ui.badgeCC.addEventListener('click', (e) => {
@@ -669,66 +687,23 @@
     /* ---- Quality menu ---- */
     async function buildQualityMenu() {
       ui.hdMenuList.innerHTML = '';
-
-      /* Show loading state */
-      const loadingItem = ce('div', 'ytp-skin-menu-item disabled');
-      loadingItem.textContent = 'Loading...';
-      ui.hdMenuList.append(loadingItem);
+      const loading = ce('div', 'ytp-skin-menu-item disabled');
+      loading.textContent = 'Loading...';
+      ui.hdMenuList.append(loading);
 
       const result = await bridgeCall('getQualities', {});
       ui.hdMenuList.innerHTML = '';
-
       if (!result) {
-        const errItem = ce('div', 'ytp-skin-menu-item disabled');
-        errItem.textContent = 'Could not load qualities';
-        ui.hdMenuList.append(errItem);
+        const err = ce('div', 'ytp-skin-menu-item disabled');
+        err.textContent = 'Could not load qualities';
+        ui.hdMenuList.append(err);
         return;
       }
-
-      let { levels, current, qualityData } = result;
-
-      /* Prefer qualityData if available (has labels & resolutions) */
-      if (qualityData && qualityData.length > 0) {
-        levels = qualityData.map(qd => qd.quality || qd.qualityLabel).filter(Boolean);
-        /* De-duplicate while preserving order */
-        const seen = new Set();
-        levels = levels.filter(q => { if (seen.has(q)) return false; seen.add(q); return true; });
-      }
-
-      if (!levels || levels.length === 0) {
-        const noItem = ce('div', 'ytp-skin-menu-item disabled');
-        noItem.textContent = 'Not available';
-        ui.hdMenuList.append(noItem);
-        return;
-      }
-
-      /* Add "Auto" first */
-      const autoItem = ce('div', 'ytp-skin-menu-item');
-      autoItem.innerHTML = `<span class="ytp-skin-menu-check">${ICONS.check}</span><span>Auto</span>`;
-      if (current === 'auto' || !current) autoItem.classList.add('active');
-      autoItem.addEventListener('click', (e) => {
-        e.stopPropagation();
-        bridgeCall('setQuality', { quality: 'auto' });
-        setTimeout(updateQualityBadge, 500);
-        closeAllMenus();
-      });
-      ui.hdMenuList.append(autoItem);
-
-      levels.forEach((q) => {
-        if (q === 'auto') return;
-        const item = ce('div', 'ytp-skin-menu-item');
-        const label = QUALITY_LABELS[q] || q;
-        const isHD = ['hd720', 'hd1080', 'hd1440', 'hd2160', 'highres'].includes(q);
-        item.innerHTML = `<span class="ytp-skin-menu-check">${ICONS.check}</span><span>${label}</span>${isHD ? '<span class="ytp-skin-hd-tag">HD</span>' : ''}`;
-        if (q === current) item.classList.add('active');
-        item.addEventListener('click', (e) => {
-          e.stopPropagation();
-          bridgeCall('setQuality', { quality: q });
-          setTimeout(updateQualityBadge, 500);
-          closeAllMenus();
-        });
-        ui.hdMenuList.append(item);
-      });
+      renderQualityItems(
+        ui.hdMenuList, document, 'ytp-skin-menu-item', 'ytp-skin-menu-check', 'ytp-skin-hd-tag',
+        result.levels, result.current, result.qualityData,
+        (q) => { bridgeCall('setQuality', { quality: q }); setTimeout(updateQualityBadge, 500); closeAllMenus(); }
+      );
     }
 
     ui.badgeHD.addEventListener('click', (e) => {
@@ -910,8 +885,6 @@
       });
     }
 
-    /* Update seek tooltip to show chapter name */
-    const origTooltipHandler = null; /* will be handled inline */
     function getChapterAtTime(t) {
       for (let i = cachedChapters.length - 1; i >= 0; i--) {
         if (t >= cachedChapters[i].startTime) return cachedChapters[i];
@@ -935,27 +908,18 @@
 
     /* ---- Quality badge label sync ---- */
     async function updateQualityBadge() {
-      const result = await bridgeCall('getQualities', {});
-      if (result && result.current) {
-        const q = result.current;
+      const result = await bridgeCall('getSyncState', {});
+      if (!result) return;
+      if (result.quality) {
+        const q = result.quality;
         const label = QUALITY_LABELS[q] || q;
-        const num = parseInt(label) || 0;
-        if (num >= 720 || ['hd720','hd1080','hd1440','hd2160','highres'].includes(q)) {
+        if (parseInt(label) >= 720 || HD_QUALITIES.includes(q)) {
           ui.badgeHD.innerHTML = label.replace(/p.*/, '') + '<sup>HD</sup>';
         } else {
           ui.badgeHD.textContent = label || 'Auto';
         }
       }
-
-      /* sync CC badge */
-      const ccResult = await bridgeCall('getCaptionState', {});
-      if (ccResult) {
-        if (ccResult.active) {
-          ui.badgeCC.classList.add('active');
-        } else {
-          ui.badgeCC.classList.remove('active');
-        }
-      }
+      ui.badgeCC.classList.toggle('active', result.captionActive);
     }
     updateQualityBadge();
     video.addEventListener('loadeddata', () => setTimeout(updateQualityBadge, 1000));
@@ -994,167 +958,6 @@
       }
     }
 
-    /* CSS for the Document PiP window controls */
-    const PIP_CSS = `
-      * { box-sizing: border-box; margin: 0; padding: 0; }
-      body { background: #000; overflow: hidden; display: flex; flex-direction: column; height: 100vh; }
-      video { width: 100%; flex: 1; object-fit: contain; background: #000; }
-      .pip-overlay {
-        position: absolute; top: 0; left: 0; right: 0; bottom: 0;
-        display: flex; flex-direction: column; justify-content: flex-end;
-        opacity: 0; transition: opacity 0.3s;
-        pointer-events: none;
-      }
-      .pip-overlay:hover, .pip-overlay.show { opacity: 1; }
-      .pip-top {
-        position: absolute; top: 0; left: 0; right: 0;
-        padding: 10px 14px 20px;
-        background: linear-gradient(to bottom, rgba(0,0,0,0.7) 0%, transparent 100%);
-        pointer-events: none;
-      }
-      .pip-title {
-        color: #fff; font-size: 13px; font-weight: 600;
-        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-        text-shadow: 0 1px 3px rgba(0,0,0,0.7);
-      }
-      .pip-channel {
-        color: #ccc; font-size: 11px; margin-top: 2px;
-        text-shadow: 0 1px 2px rgba(0,0,0,0.6);
-      }
-      .pip-bottom {
-        background: linear-gradient(to top, rgba(0,0,0,0.75) 0%, transparent 100%);
-        padding: 24px 10px 8px;
-        pointer-events: auto;
-      }
-      .pip-controls {
-        display: flex; align-items: center; justify-content: center;
-        gap: 8px; margin-bottom: 8px; flex-wrap: wrap;
-      }
-      .pip-btn {
-        background: none; border: none; cursor: pointer; color: #fff;
-        display: flex; align-items: center; justify-content: center;
-        padding: 0; opacity: 0.9; transition: transform 0.12s, opacity 0.12s;
-        height: 24px; box-sizing: border-box;
-      }
-      .pip-btn:hover { transform: scale(1.15); opacity: 1; }
-      .pip-btn svg { width: 22px; height: 22px; fill: currentColor; }
-      .pip-btn-play { 
-        width: 44px; height: 44px; border: 2px solid #fff; border-radius: 50%;
-        background: rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center;
-      }
-      .pip-btn-play:hover { background: rgba(255,255,255,0.12); }
-      .pip-btn-play svg { width: 24px; height: 24px; fill: #fff; margin-left: 2px; }
-      .pip-btn-play.playing svg { margin-left: 0; }
-      .pip-progress-row {
-        display: flex; align-items: center; gap: 8px; padding: 0 2px;
-      }
-      .pip-time {
-        color: #fff; font-size: 11px; font-variant-numeric: tabular-nums;
-        min-width: 34px; user-select: none; text-shadow: 0 1px 2px rgba(0,0,0,0.5);
-      }
-      .pip-time-right { text-align: right; }
-      .pip-seek { flex: 1; position: relative; height: 20px; display: flex; align-items: center; cursor: pointer; }
-      .pip-seek-track {
-        width: 100%; height: 3px; background: rgba(255,255,255,0.25);
-        border-radius: 2px; position: relative; overflow: visible;
-      }
-      .pip-seek:hover .pip-seek-track { height: 5px; }
-      .pip-seek-buf { position: absolute; top: 0; left: 0; height: 100%; background: rgba(255,255,255,0.3); border-radius: 2px; }
-      .pip-seek-fill { position: absolute; top: 0; left: 0; height: 100%; background: #e53935; border-radius: 2px; }
-      .pip-seek-thumb {
-        position: absolute; top: 50%; width: 12px; height: 12px;
-        border-radius: 50%; background: #e53935; transform: translate(-50%, -50%);
-        box-shadow: 0 0 4px rgba(0,0,0,0.5);
-      }
-      .pip-seek:hover .pip-seek-thumb { width: 14px; height: 14px; }
-      .pip-vol-wrap { display: flex; align-items: center; gap: 4px; }
-      .pip-vol-slider {
-        width: 60px; height: 3px; background: rgba(255,255,255,0.25);
-        border-radius: 2px; position: relative; cursor: pointer;
-      }
-      .pip-vol-fill { position: absolute; top: 0; left: 0; height: 100%; background: #fff; border-radius: 2px; }
-      .pip-vol-thumb {
-        position: absolute; top: 50%; width: 10px; height: 10px;
-        border-radius: 50%; background: #fff; transform: translate(-50%, -50%);
-        box-shadow: 0 0 3px rgba(0,0,0,0.5);
-      }
-      .pip-close-btn {
-        position: absolute; top: 8px; right: 8px;
-        background: rgba(0,0,0,0.5); border: none; cursor: pointer; color: #fff;
-        width: 28px; height: 28px; border-radius: 50%;
-        display: flex; align-items: center; justify-content: center;
-        pointer-events: auto; opacity: 0.8; transition: opacity 0.15s;
-      }
-      .pip-close-btn:hover { opacity: 1; background: rgba(0,0,0,0.7); }
-      .pip-close-btn svg { width: 16px; height: 16px; fill: currentColor; }
-
-      /* PiP menu styles (CC, Quality, Chapters) */
-      .pip-menu-row {
-        display: flex; align-items: center; justify-content: center;
-        gap: 8px; margin-bottom: 4px;
-      }
-      .pip-badge {
-        font-size: 11px; font-weight: 700; letter-spacing: 0.3px;
-        border: 1.5px solid rgba(255,255,255,0.6); border-radius: 3px;
-        padding: 1px 4px; line-height: 1; color: #fff; cursor: pointer;
-        user-select: none; transition: border-color 0.15s, background 0.15s;
-        background: none; height: 24px; box-sizing: border-box;
-        display: inline-flex; align-items: center; justify-content: center;
-      }
-      .pip-badge:hover { border-color: #fff; background: rgba(255,255,255,0.12); }
-      .pip-badge.active { background: rgba(255,255,255,0.18); border-color: #fff; }
-      .pip-badge sup { font-size: 7px; vertical-align: super; margin-left: 1px; }
-      .pip-btn-chap { background: none; border: none; cursor: pointer; color: #fff; padding: 0; opacity: 0.9; height: 24px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; }
-      .pip-btn-chap:hover { opacity: 1; }
-      .pip-btn-chap svg { width: 18px; height: 18px; fill: currentColor; }
-      .pip-menu {
-        position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%);
-        min-width: 150px; max-height: 220px; background: rgba(15,15,15,0.95);
-        border-radius: 6px; padding: 4px 0; opacity: 0; pointer-events: none;
-        transition: opacity 0.2s; margin-bottom: 4px;
-        box-shadow: 0 4px 16px rgba(0,0,0,0.55); overflow-y: auto; z-index: 90;
-        font-family: 'Segoe UI', Roboto, Arial, sans-serif;
-      }
-      .pip-menu.visible { opacity: 1; pointer-events: auto; }
-      .pip-menu::-webkit-scrollbar { width: 4px; }
-      .pip-menu::-webkit-scrollbar-track { background: transparent; }
-      .pip-menu::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 2px; }
-      .pip-menu-title {
-        color: #aaa; font-size: 10px; font-weight: 600; text-transform: uppercase;
-        letter-spacing: 0.6px; padding: 4px 10px 6px; border-bottom: 1px solid rgba(255,255,255,0.1);
-        margin-bottom: 2px; user-select: none;
-      }
-      .pip-menu-item {
-        display: flex; align-items: center; gap: 6px; padding: 6px 10px;
-        color: #ddd; font-size: 11px; cursor: pointer; transition: background 0.12s;
-        white-space: nowrap; user-select: none;
-      }
-      .pip-menu-item:hover { background: rgba(255,255,255,0.08); color: #fff; }
-      .pip-menu-item.active { color: #fff; font-weight: 600; }
-      .pip-menu-item.disabled { color: #666; cursor: default; pointer-events: none; }
-      .pip-menu-check {
-        width: 14px; height: 14px; display: flex; align-items: center;
-        justify-content: center; opacity: 0; flex-shrink: 0;
-      }
-      .pip-menu-check svg { width: 14px; height: 14px; fill: #e53935; }
-      .pip-menu-item.active .pip-menu-check { opacity: 1; }
-      .pip-hd-tag {
-        font-size: 8px; font-weight: 700; background: rgba(229,57,53,0.8);
-        color: #fff; padding: 1px 3px; border-radius: 2px; margin-left: auto;
-      }
-      .pip-menu-wrap { position: relative; display: inline-flex; align-items: center; }
-      .pip-chap-time { color: #e53935; font-size: 10px; font-weight: 600; min-width: 32px; font-variant-numeric: tabular-nums; }
-      .pip-chap-title { color: #ddd; font-size: 11px; }
-      .pip-menu-item.active .pip-chap-title { color: #fff; }
-
-      /* PiP chapter markers on seek bar */
-      .pip-chap-marker {
-        position: absolute; top: 0; width: 2px; height: 100%;
-        background: rgba(255,255,255,0.5); pointer-events: none;
-        transform: translateX(-50%); z-index: 1;
-      }
-    `;
-
     async function openDocumentPip() {
       /* Document PiP API available? */
       if (!('documentPictureInPicture' in window)) {
@@ -1171,10 +974,11 @@
       });
       pipWindow = pipWin;
 
-      /* Inject styles */
-      const style = pipWin.document.createElement('style');
-      style.textContent = PIP_CSS;
-      pipWin.document.head.appendChild(style);
+      /* Inject styles from pip.css */
+      const link = pipWin.document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = chrome.runtime.getURL('content/pip.css');
+      pipWin.document.head.appendChild(link);
 
       /* Set font */
       pipWin.document.body.style.fontFamily = "'Segoe UI', Roboto, Arial, sans-serif";
@@ -1369,8 +1173,7 @@
         video.muted = !video.muted;
       });
       const syncPipVol = () => {
-        pipBtnVol.innerHTML = (video.muted || video.volume === 0) ? ICONS.volumeMute
-          : video.volume < 0.5 ? ICONS.volumeLow : ICONS.volumeHigh;
+        pipBtnVol.innerHTML = volIcon(video.volume, video.muted);
         const vp = video.muted ? 0 : video.volume * 100;
         pipVolFill.style.width = vp + '%';
         pipVolThumb.style.left = vp + '%';
@@ -1418,31 +1221,10 @@
       syncPipProgress();
 
       /* Seek drag */
-      const pipSeekFromE = (e) => {
-        const r = pTrack.getBoundingClientRect();
-        return Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
-      };
-      pSeek.addEventListener('mousedown', (e) => {
-        e.preventDefault();
-        pipSeeking = true;
-        const pct = pipSeekFromE(e);
-        video.currentTime = pct * (video.duration || 0);
-        pFill.style.width = (pct * 100) + '%';
-        pThumb.style.left = (pct * 100) + '%';
-        const onM = (ev) => {
-          const p = pipSeekFromE(ev);
-          pFill.style.width = (p * 100) + '%';
-          pThumb.style.left = (p * 100) + '%';
-          video.currentTime = p * (video.duration || 0);
-        };
-        const onU = () => {
-          pipSeeking = false;
-          pipWin.document.removeEventListener('mousemove', onM);
-          pipWin.document.removeEventListener('mouseup', onU);
-        };
-        pipWin.document.addEventListener('mousemove', onM);
-        pipWin.document.addEventListener('mouseup', onU);
-      });
+      attachSeekDrag(
+        pSeek, pTrack, pFill, pThumb, pipWin.document, video,
+        () => { pipSeeking = true; }, () => { pipSeeking = false; }
+      );
 
       /* Click video to toggle play */
       video.addEventListener('click', () => {
@@ -1459,20 +1241,18 @@
 
       /* PiP CC menu */
       async function buildPipCCMenu() {
+        const titleEl = pipWin.document.createElement('div');
+        titleEl.className = 'pip-menu-title';
+        titleEl.textContent = 'Subtitles';
         pipCCMenu.innerHTML = '';
         const loading = pipWin.document.createElement('div');
         loading.className = 'pip-menu-item disabled';
         loading.textContent = 'Loading...';
         pipCCMenu.append(loading);
 
-        const titleEl = pipWin.document.createElement('div');
-        titleEl.className = 'pip-menu-title';
-        titleEl.textContent = 'Subtitles';
-
         const result = await bridgeCall('getCaptions', {});
         pipCCMenu.innerHTML = '';
         pipCCMenu.append(titleEl);
-
         if (!result) {
           const err = pipWin.document.createElement('div');
           err.className = 'pip-menu-item disabled';
@@ -1480,42 +1260,12 @@
           pipCCMenu.append(err);
           return;
         }
-
-        const { tracks, current } = result;
-
-        /* Off option */
-        const offItem = pipWin.document.createElement('div');
-        offItem.className = 'pip-menu-item' + (!current || !current.languageCode ? ' active' : '');
-        offItem.innerHTML = `<span class="pip-menu-check">${ICONS.check}</span><span>Off</span>`;
-        offItem.addEventListener('click', (e) => {
-          e.stopPropagation();
-          bridgeCall('setCaptions', { track: {} });
-          pipCCBadge.classList.remove('active');
-          closePipMenus();
-        });
-        pipCCMenu.append(offItem);
-
-        if (tracks && tracks.length > 0) {
-          tracks.forEach((t) => {
-            const item = pipWin.document.createElement('div');
-            const label = t.displayName || t.languageName || t.languageCode || 'Unknown';
-            const isActive = current && current.languageCode === t.languageCode;
-            item.className = 'pip-menu-item' + (isActive ? ' active' : '');
-            item.innerHTML = `<span class="pip-menu-check">${ICONS.check}</span><span>${label}</span>`;
-            item.addEventListener('click', (e) => {
-              e.stopPropagation();
-              bridgeCall('setCaptions', { track: t });
-              pipCCBadge.classList.add('active');
-              closePipMenus();
-            });
-            pipCCMenu.append(item);
-          });
-        } else {
-          const noItem = pipWin.document.createElement('div');
-          noItem.className = 'pip-menu-item disabled';
-          noItem.textContent = 'No subtitles available';
-          pipCCMenu.append(noItem);
-        }
+        renderCCItems(
+          pipCCMenu, pipWin.document, 'pip-menu-item', 'pip-menu-check',
+          result.tracks, result.current,
+          () => { bridgeCall('setCaptions', { track: {} }); pipCCBadge.classList.remove('active'); closePipMenus(); },
+          (t) => { bridgeCall('setCaptions', { track: t }); pipCCBadge.classList.add('active'); closePipMenus(); }
+        );
       }
 
       pipCCBadge.addEventListener('click', (e) => {
@@ -1527,20 +1277,18 @@
 
       /* PiP Quality menu */
       async function buildPipQualityMenu() {
+        const titleEl = pipWin.document.createElement('div');
+        titleEl.className = 'pip-menu-title';
+        titleEl.textContent = 'Quality';
         pipHDMenu.innerHTML = '';
         const loading = pipWin.document.createElement('div');
         loading.className = 'pip-menu-item disabled';
         loading.textContent = 'Loading...';
         pipHDMenu.append(loading);
 
-        const titleEl = pipWin.document.createElement('div');
-        titleEl.className = 'pip-menu-title';
-        titleEl.textContent = 'Quality';
-
         const result = await bridgeCall('getQualities', {});
         pipHDMenu.innerHTML = '';
         pipHDMenu.append(titleEl);
-
         if (!result) {
           const err = pipWin.document.createElement('div');
           err.className = 'pip-menu-item disabled';
@@ -1548,48 +1296,11 @@
           pipHDMenu.append(err);
           return;
         }
-
-        let { levels, current: curQ, qualityData } = result;
-
-        if (qualityData && qualityData.length > 0) {
-          levels = qualityData.map(qd => qd.quality || qd.qualityLabel).filter(Boolean);
-          const seen = new Set();
-          levels = levels.filter(q => { if (seen.has(q)) return false; seen.add(q); return true; });
-        }
-
-        if (!levels || levels.length === 0) {
-          const noItem = pipWin.document.createElement('div');
-          noItem.className = 'pip-menu-item disabled';
-          noItem.textContent = 'Not available';
-          pipHDMenu.append(noItem);
-          return;
-        }
-
-        /* Auto */
-        const autoItem = pipWin.document.createElement('div');
-        autoItem.className = 'pip-menu-item' + (curQ === 'auto' || !curQ ? ' active' : '');
-        autoItem.innerHTML = `<span class="pip-menu-check">${ICONS.check}</span><span>Auto</span>`;
-        autoItem.addEventListener('click', (e) => {
-          e.stopPropagation();
-          bridgeCall('setQuality', { quality: 'auto' });
-          closePipMenus();
-        });
-        pipHDMenu.append(autoItem);
-
-        levels.forEach((q) => {
-          if (q === 'auto') return;
-          const item = pipWin.document.createElement('div');
-          const label = QUALITY_LABELS[q] || q;
-          const isHD = ['hd720', 'hd1080', 'hd1440', 'hd2160', 'highres'].includes(q);
-          item.className = 'pip-menu-item' + (q === curQ ? ' active' : '');
-          item.innerHTML = `<span class="pip-menu-check">${ICONS.check}</span><span>${label}</span>${isHD ? '<span class="pip-hd-tag">HD</span>' : ''}`;
-          item.addEventListener('click', (e) => {
-            e.stopPropagation();
-            bridgeCall('setQuality', { quality: q });
-            closePipMenus();
-          });
-          pipHDMenu.append(item);
-        });
+        renderQualityItems(
+          pipHDMenu, pipWin.document, 'pip-menu-item', 'pip-menu-check', 'pip-hd-tag',
+          result.levels, result.current, result.qualityData,
+          (q) => { bridgeCall('setQuality', { quality: q }); closePipMenus(); }
+        );
       }
 
       pipHDBadge.addEventListener('click', (e) => {

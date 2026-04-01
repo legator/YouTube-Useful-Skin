@@ -14,6 +14,24 @@
     return null;
   }
 
+  /* ---- helpers ---- */
+  function mapCaptionTracks(captionTracks) {
+    return captionTracks.map((ct) => ({
+      languageCode: ct.languageCode,
+      languageName: ct.name?.simpleText || ct.name?.runs?.map(r => r.text).join('') || ct.languageCode,
+      displayName: ct.name?.simpleText || ct.name?.runs?.map(r => r.text).join('') || ct.languageCode,
+      kind: ct.kind || '',
+      vss_id: ct.vssId || '',
+      is_translateable: ct.isTranslatable || false,
+      _raw: ct,
+    }));
+  }
+
+  function extractSpec(pr) {
+    const r = pr?.storyboards?.playerStoryboardSpecRenderer;
+    return r?.spec || r?.highResUrl || null;
+  }
+
   /* ---- respond to requests from content script ---- */
   window.addEventListener('message', (e) => {
     if (e.source !== window) return;
@@ -75,42 +93,16 @@
         /* Method 2: player's internal caption module (playerResponse) */
         if (tracks.length === 0) {
           try {
-            const resp = ytP.getPlayerResponse?.();
-            if (resp && resp.captions && resp.captions.playerCaptionsTracklistRenderer) {
-              const captionTracks = resp.captions.playerCaptionsTracklistRenderer.captionTracks;
-              if (Array.isArray(captionTracks)) {
-                tracks = captionTracks.map((ct) => ({
-                  languageCode: ct.languageCode,
-                  languageName: ct.name?.simpleText || ct.name?.runs?.map(r => r.text).join('') || ct.languageCode,
-                  displayName: ct.name?.simpleText || ct.name?.runs?.map(r => r.text).join('') || ct.languageCode,
-                  kind: ct.kind || '',
-                  vss_id: ct.vssId || '',
-                  is_translateable: ct.isTranslatable || false,
-                  _raw: ct,
-                }));
-              }
-            }
+            const cts = ytP.getPlayerResponse?.()?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
+            if (Array.isArray(cts) && cts.length > 0) tracks = mapCaptionTracks(cts);
           } catch (_) {}
         }
 
         /* Method 3: Try via ytInitialPlayerResponse global */
         if (tracks.length === 0) {
           try {
-            const ir = window.ytInitialPlayerResponse;
-            if (ir && ir.captions && ir.captions.playerCaptionsTracklistRenderer) {
-              const captionTracks = ir.captions.playerCaptionsTracklistRenderer.captionTracks;
-              if (Array.isArray(captionTracks)) {
-                tracks = captionTracks.map((ct) => ({
-                  languageCode: ct.languageCode,
-                  languageName: ct.name?.simpleText || ct.name?.runs?.map(r => r.text).join('') || ct.languageCode,
-                  displayName: ct.name?.simpleText || ct.name?.runs?.map(r => r.text).join('') || ct.languageCode,
-                  kind: ct.kind || '',
-                  vss_id: ct.vssId || '',
-                  is_translateable: ct.isTranslatable || false,
-                  _raw: ct,
-                }));
-              }
-            }
+            const cts = window.ytInitialPlayerResponse?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
+            if (Array.isArray(cts) && cts.length > 0) tracks = mapCaptionTracks(cts);
           } catch (_) {}
         }
 
@@ -139,14 +131,15 @@
         break;
       }
 
-      case 'getCaptionState': {
-        if (!ytP) { reply({ active: false }); return; }
-        let active = false;
+      case 'getSyncState': {
+        let quality = '';
+        let captionActive = false;
+        try { quality = ytP ? (ytP.getPlaybackQuality?.() || '') : ''; } catch (_) {}
         try {
-          const t = ytP.getOption('captions', 'track');
-          active = !!(t && t.languageCode);
+          const t = ytP?.getOption?.('captions', 'track');
+          captionActive = !!(t && t.languageCode);
         } catch (_) {}
-        reply({ active });
+        reply({ quality, captionActive });
         break;
       }
 
@@ -157,27 +150,13 @@
         /* Method 1: YouTube player API — getPlayerResponse() */
         try {
           if (ytP && typeof ytP.getPlayerResponse === 'function') {
-            const pr = ytP.getPlayerResponse();
-            if (pr?.storyboards?.playerStoryboardSpecRenderer?.spec) {
-              spec = pr.storyboards.playerStoryboardSpecRenderer.spec;
-            }
-            if (!spec && pr?.storyboards?.playerStoryboardSpecRenderer?.highResUrl) {
-              spec = pr.storyboards.playerStoryboardSpecRenderer.highResUrl;
-            }
+            spec = extractSpec(ytP.getPlayerResponse());
           }
         } catch (_) {}
 
         /* Method 2: ytInitialPlayerResponse global */
         if (!spec) {
-          try {
-            const ir = window.ytInitialPlayerResponse;
-            if (ir?.storyboards?.playerStoryboardSpecRenderer?.spec) {
-              spec = ir.storyboards.playerStoryboardSpecRenderer.spec;
-            }
-            if (!spec && ir?.storyboards?.playerStoryboardSpecRenderer?.highResUrl) {
-              spec = ir.storyboards.playerStoryboardSpecRenderer.highResUrl;
-            }
-          } catch (_) {}
+          try { spec = extractSpec(window.ytInitialPlayerResponse); } catch (_) {}
         }
 
         /* Method 3: scan <script> tags for embedded storyboard spec */
@@ -368,26 +347,6 @@
           }
         }
         reply({ ok: synced });
-        break;
-      }
-
-      /* ---------- Debug Storyboard ---------- */
-      case 'debugStoryboard': {
-        let info = { spec: null, storyboards: null, hasPlayer: !!ytP };
-        try {
-          const pr = (ytP ? ytP.getPlayerResponse?.() : null);
-          const ir = window.ytInitialPlayerResponse;
-          const source = pr || ir;
-          if (source && source.storyboards) {
-            info.storyboards = JSON.parse(JSON.stringify(source.storyboards));
-            if (source.storyboards.playerStoryboardSpecRenderer) {
-              info.spec = source.storyboards.playerStoryboardSpecRenderer.spec;
-            }
-          }
-          info.hasPlayerResponse = !!pr;
-          info.hasInitialResponse = !!ir;
-        } catch (e) { info.error = e.message; }
-        reply(info);
         break;
       }
 
