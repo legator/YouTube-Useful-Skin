@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate manifest.json
+        run: python3 -m json.tool manifest.json > /dev/null
+
+      - name: Check required files exist
+        run: |
+          for f in \
+            manifest.json \
+            content/skin.js \
+            content/skin.css \
+            content/bridge.js \
+            popup/popup.html \
+            popup/popup.js \
+            icons/icon16.png \
+            icons/icon48.png \
+            icons/icon128.png; do
+            [ -f "$f" ] || { echo "Missing: $f"; exit 1; }
+          done
+          echo "All required files present."
+
+      - name: Build zip (dry run)
+        run: |
+          zip -r extension.zip \
+            manifest.json \
+            content/ \
+            popup/ \
+            icons/*.png \
+            --exclude "*.svg"
+          echo "Zip size: $(du -sh extension.zip | cut -f1)"

@@ -7,12 +7,6 @@ A Chrome extension that replaces the default YouTube player controls with a cine
 - **Red seek bar** at the bottom with buffer preview, time codes, and scrub tooltip
 - **Toggle on/off** via the extension popup (no page reload needed)
 
-## Screenshot
-
-The skin applied to a YouTube video:
-
-![Skin preview](docs/preview.png)
-
 ## Installation
 
 1. Clone or download this repository.
