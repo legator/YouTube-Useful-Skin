@@ -1,6 +1,5 @@
-import { ce } from './utils.js';
+import { ce, fmtTime } from './utils.js';
 import { ICONS } from './icons.js';
-import { fmtTime } from './utils.js';
 import { HD_QUALITIES, QUALITY_LABELS } from './constants.js';
 
 /** Builds and returns the complete skin DOM overlay. */
@@ -116,10 +115,10 @@ export function buildSkin() {
     topBar, bottomBar,
     titleEl, channelEl, viewsEl,
     btnVol, volPopup, volSliderTrack, volSliderFill, volSliderThumb, volLabel, volWrap,
-    badgeCC, ccMenu, ccMenuList, ccWrap,
-    badgeHD, hdMenu, hdMenuList, hdWrap,
-    badgeSpeed, speedMenu, speedMenuList, speedWrap,
-    btnChapters, chapMenu, chapMenuList, chapWrap,
+    badgeCC, ccMenu, ccMenuList,
+    badgeHD, hdMenu, hdMenuList,
+    badgeSpeed, speedMenu, speedMenuList,
+    btnChapters, chapMenu, chapMenuList,
     btnSkipBack, btnPlay, btnSkipFwd,
     btnTheater, btnMini, btnFS,
     timeLeft, timeRight,

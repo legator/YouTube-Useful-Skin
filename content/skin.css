@@ -344,7 +344,6 @@
   pointer-events: none;
   transition: opacity 0.2s ease, transform 0.2s ease;
   transform: translateX(-50%) translateY(6px);
-  margin-bottom: 8px;
   box-shadow: 0 4px 16px rgba(0,0,0,0.5);
 }
 
@@ -641,7 +640,6 @@
   overflow: hidden;
   box-shadow: 0 2px 10px rgba(0,0,0,0.7);
   border: 2px solid rgba(255,255,255,0.25);
-  background: #000;
 }
 
 .ytp-skin-seek-preview.visible {
