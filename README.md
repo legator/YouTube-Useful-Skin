@@ -8,13 +8,16 @@ A Chrome extension that replaces the default YouTube player controls with a cine
 - **Advanced features** — Picture-in-Picture support, Media Session API integration, chapter navigation
 - **Toggle on/off** via the extension popup (no page reload needed)
 
-## Installation
+## Installation (Development)
 
 1. Clone or download this repository.
 2. Open **Chrome** → navigate to `chrome://extensions`.
 3. Enable **Developer mode** (toggle in the top-right corner).
 4. Click **Load unpacked** and select the `YouTube-Useful-Skin` folder.
 5. Navigate to any YouTube video — the custom skin is applied automatically.
+
+## ScreenShoot
+(image.png)
 
 ## File Structure
 

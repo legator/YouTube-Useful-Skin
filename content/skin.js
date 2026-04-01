@@ -63,6 +63,26 @@
     import(_base + 'mediaSession.js'),
   ]);
 
+  /* Throttle utility for performance-critical event handlers */
+  function throttle(fn, delay) {
+    let lastCall = 0;
+    let timeoutId = null;
+    return function (...args) {
+      const now = Date.now();
+      const timeSinceLastCall = now - lastCall;
+      if (timeSinceLastCall >= delay) {
+        lastCall = now;
+        fn.apply(this, args);
+      } else {
+        clearTimeout(timeoutId);
+        timeoutId = setTimeout(() => {
+          lastCall = Date.now();
+          fn.apply(this, args);
+        }, delay - timeSinceLastCall);
+      }
+    };
+  }
+
   /* Module state */
   let skinInjected = false;
   let seeking = false;
@@ -141,6 +161,7 @@
 
     /* ---- Storyboard thumbnail preview helpers ---- */
     let storyboardData = null;
+    const storyboardImageCache = new Map(); /* Cache loaded images for performance */
 
     async function loadStoryboard() {
       if (storyboardData) return; /* Already loaded successfully */
@@ -153,8 +174,14 @@
           /* Verify URL is reachable before committing */
           const testUrl = storyboardUrl(parsed, 0);
           const img = new Image();
-          img.onload = () => { storyboardData = parsed; };
-          img.onerror = () => { storyboardData = parsed; };
+          img.onload = () => { 
+            storyboardData = parsed;
+            storyboardImageCache.set(testUrl, 'loaded');
+          };
+          img.onerror = () => { 
+            storyboardData = parsed;
+            storyboardImageCache.set(testUrl, 'loaded');
+          };
           img.src = testUrl;
           return; /* Done — onload/onerror will finalise */
         }
@@ -169,6 +196,16 @@
 
     let storyboardRetries = 0;
 
+    /* Lazy load storyboard image with caching */
+    function preloadStoryboardImage(url) {
+      if (storyboardImageCache.has(url)) return;
+      storyboardImageCache.set(url, 'loading');
+      const img = new Image();
+      img.onload = () => storyboardImageCache.set(url, 'loaded');
+      img.onerror = () => storyboardImageCache.delete(url);
+      img.src = url;
+    }
+
     function updateSeekPreview(pct, time) {
       if (!storyboardData) {
         ui.seekPreview.classList.remove('visible');
@@ -180,15 +217,23 @@
         ui.seekPreview.classList.remove('visible');
         return;
       }
-      ui.seekPreviewImg.style.backgroundImage = `url("${frame.url}")`;
-      ui.seekPreviewImg.style.backgroundPosition = `-${frame.x}px -${frame.y}px`;
-      ui.seekPreviewImg.style.backgroundSize = `${frame.cols * frame.w}px ${frame.rows * frame.h}px`;
-      ui.seekPreviewImg.style.width = frame.w + 'px';
-      ui.seekPreviewImg.style.height = frame.h + 'px';
-      /* Position horizontally, clamped to seek area */
-      let left = pct * 100;
-      ui.seekPreview.style.left = left + '%';
-      ui.seekPreview.classList.add('visible');
+      /* Lazy load image only when needed */
+      if (!storyboardImageCache.has(frame.url)) {
+        preloadStoryboardImage(frame.url);
+      }
+      /* Only show preview if image is loaded or loading */
+      const cacheStatus = storyboardImageCache.get(frame.url);
+      if (cacheStatus) {
+        ui.seekPreviewImg.style.backgroundImage = `url("${frame.url}")`;
+        ui.seekPreviewImg.style.backgroundPosition = `-${frame.x}px -${frame.y}px`;
+        ui.seekPreviewImg.style.backgroundSize = `${frame.cols * frame.w}px ${frame.rows * frame.h}px`;
+        ui.seekPreviewImg.style.width = frame.w + 'px';
+        ui.seekPreviewImg.style.height = frame.h + 'px';
+        /* Position horizontally, clamped to seek area */
+        let left = pct * 100;
+        ui.seekPreview.style.left = left + '%';
+        ui.seekPreview.classList.add('visible');
+      }
     }
 
     /* Load storyboard early */
@@ -201,7 +246,8 @@
     }
     video.addEventListener('loadeddata', onStoryboardLoadedData);
 
-    ui.seekArea.addEventListener('mousemove', (e) => {
+    /* Throttled mousemove handler for seek area (60fps = ~16ms) */
+    const handleSeekMouseMove = throttle((e) => {
       if (seeking) return;
       const rect = ui.seekTrack.getBoundingClientRect();
       let pct = (e.clientX - rect.left) / rect.width;
@@ -212,7 +258,9 @@
       ui.seekTooltip.textContent = chapter ? `${timeStr} • ${chapter.title}` : timeStr;
       ui.seekTooltip.style.left = (pct * 100) + '%';
       updateSeekPreview(pct, hoverTime);
-    });
+    }, 16);
+    
+    ui.seekArea.addEventListener('mousemove', handleSeekMouseMove);
 
     ui.seekArea.addEventListener('mouseleave', () => {
       ui.seekPreview.classList.remove('visible');
@@ -853,7 +901,9 @@
       clearTimeout(hideTimeout);
       player.classList.remove('ytp-skin-controls-visible');
     };
-    player.addEventListener('mousemove', showControls);
+    /* Throttled mousemove for controls visibility (reduced to 100ms for smoother UX) */
+    const throttledShowControls = throttle(showControls, 100);
+    player.addEventListener('mousemove', throttledShowControls);
     player.addEventListener('mouseenter', showControls);
     player.addEventListener('mouseleave', onPlayerMouseLeave);
 
@@ -866,13 +916,15 @@
     video.addEventListener('play', onVideoPlay);
 
     /* ---- cleanup on navigation ---- */
+    /* Optimized: observe only the player container instead of entire document.body */
     const observer = new MutationObserver(() => {
       if (!document.contains(player)) {
         if (cleanupSkin) { cleanupSkin(); cleanupSkin = null; }
         observer.disconnect();
       }
     });
-    observer.observe(document.body, { childList: true, subtree: true });
+    const playerContainer = player.parentElement || document.body;
+    observer.observe(playerContainer, { childList: true, subtree: false });
 
     cleanupSkin = function () {
       skinInjected = false;
@@ -893,7 +945,7 @@
       video.removeEventListener('leavepictureinpicture', syncPipBtn);
       video.removeEventListener('loadeddata', onLoadedDataInitChapters);
       player.removeEventListener('click', docClickHandler);
-      player.removeEventListener('mousemove', showControls);
+      player.removeEventListener('mousemove', throttledShowControls);
       player.removeEventListener('mouseenter', showControls);
       player.removeEventListener('mouseleave', onPlayerMouseLeave);
       document.removeEventListener('click', docClickHandler);
@@ -916,8 +968,10 @@
   waitForPlayer();
 
   /* YouTube is an SPA — listen for navigation */
+  /* Optimized: observe only ytd-app or main content container */
+  const ytdApp = document.querySelector('ytd-app') || document.body;
   const navObserver = new MutationObserver(() => waitForPlayer());
-  navObserver.observe(document.body, { childList: true, subtree: true });
+  navObserver.observe(ytdApp, { childList: true, subtree: ytdApp !== document.body });
 
   /* Also handle yt-navigate-finish (YouTube custom event) */
   window.addEventListener('yt-navigate-finish', () => {
