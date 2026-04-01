@@ -65,6 +65,12 @@
 
 /* ===== CUSTOM SKIN OVERLAY ===== */
 
+.ytp-skin-top-bar,
+.ytp-skin-bottom-bar,
+.ytp-skin-menu {
+  font-family: 'Segoe UI', Roboto, Arial, sans-serif;
+}
+
 /* --- Top Bar --- */
 .ytp-skin-top-bar {
   position: absolute;
@@ -80,7 +86,6 @@
   pointer-events: none;
   opacity: 0;
   transition: opacity 0.3s ease;
-  font-family: 'Segoe UI', Roboto, Arial, sans-serif;
 }
 
 .html5-video-player:hover .ytp-skin-top-bar,
@@ -138,7 +143,6 @@
   opacity: 0;
   transition: opacity 0.3s ease;
   padding-bottom: 0;
-  font-family: 'Segoe UI', Roboto, Arial, sans-serif;
 }
 
 .html5-video-player:hover .ytp-skin-bottom-bar,
@@ -210,10 +214,6 @@
   height: 28px;
   fill: #fff;
   margin-left: 3px;  /* optical centre for play triangle */
-}
-
-.ytp-skin-btn-play.paused svg {
-  margin-left: 3px;
 }
 
 .ytp-skin-btn-play.playing svg {
@@ -344,7 +344,6 @@
   pointer-events: none;
   transition: opacity 0.2s ease, transform 0.2s ease;
   transform: translateX(-50%) translateY(6px);
-  margin-bottom: 8px;
   box-shadow: 0 4px 16px rgba(0,0,0,0.5);
 }
 
@@ -427,7 +426,6 @@
   overflow-y: auto;
   overflow-x: hidden;
   z-index: 80;
-  font-family: 'Segoe UI', Roboto, Arial, sans-serif;
 }
 
 .ytp-skin-menu.visible {
@@ -518,6 +516,30 @@
   border-radius: 2px;
   margin-left: auto;
   letter-spacing: 0.4px;
+}
+
+/* --- Chapter name strip (above seek bar) --- */
+.ytp-skin-chap-name {
+  width: 100%;
+  padding: 0 14px 2px 14px;
+  box-sizing: border-box;
+  color: rgba(255,255,255,0.75);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+  min-height: 14px;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.6);
+  transition: opacity 0.2s ease;
+}
+
+/* Prev/next chapter buttons — hidden until chapters are available */
+.ytp-skin-btn-chap-prev,
+.ytp-skin-btn-chap-next {
+  display: none;
 }
 
 /* --- Progress / Seek Bar --- */
@@ -642,7 +664,6 @@
   overflow: hidden;
   box-shadow: 0 2px 10px rgba(0,0,0,0.7);
   border: 2px solid rgba(255,255,255,0.25);
-  background: #000;
 }
 
 .ytp-skin-seek-preview.visible {
@@ -788,6 +809,63 @@
   max-height: 320px;
 }
 
+/* Pinned state */
+.ytp-skin-chap-menu.pinned {
+  background: rgba(15,15,15,0.35);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  max-height: 400px;
+  z-index: 100;
+  margin-bottom: 0;
+}
+
+/* Header bar (title + pin button) */
+.ytp-skin-menu-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 14px 2px;
+  cursor: default;
+}
+
+.ytp-skin-chap-menu.pinned .ytp-skin-menu-header {
+  cursor: grab;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  margin-bottom: 4px;
+}
+
+.ytp-skin-chap-menu.pinned .ytp-skin-menu-header:active {
+  cursor: grabbing;
+}
+
+.ytp-skin-chap-pin {
+  background: none;
+  border: none;
+  color: rgba(255,255,255,0.35);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+  line-height: 1;
+  transition: color 0.15s, background 0.15s;
+  flex-shrink: 0;
+}
+
+.ytp-skin-chap-pin:hover {
+  color: #fff;
+  background: rgba(255,255,255,0.1);
+}
+
+.ytp-skin-chap-pin.active {
+  color: #e53935;
+}
+
+.ytp-skin-menu-header .ytp-skin-menu-title {
+  padding: 0;
+  border-bottom: none;
+  margin-bottom: 0;
+}
+
 .ytp-skin-chap-item {
   gap: 10px !important;
 }
@@ -827,8 +905,17 @@
   transform: translateX(-50%);
   z-index: 1;
   border-radius: 1px;
+  transition: background 0.1s ease;
+}
+
+.ytp-skin-chap-marker.played {
+  background: rgba(229,57,53,0.8);
 }
 
 .ytp-skin-seek:hover .ytp-skin-chap-marker {
   background: rgba(255,255,255,0.7);
+}
+
+.ytp-skin-seek:hover .ytp-skin-chap-marker.played {
+  background: rgba(229,57,53,1);
 }

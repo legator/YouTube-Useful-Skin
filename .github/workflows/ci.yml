@@ -24,6 +24,7 @@ jobs:
             content/skin.js \
             content/skin.css \
             content/bridge.js \
+            content/pip.css \
             popup/popup.html \
             popup/popup.js \
             icons/icon16.png \
