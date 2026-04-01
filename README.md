@@ -16,8 +16,9 @@ A Chrome extension that replaces the default YouTube player controls with a cine
 4. Click **Load unpacked** and select the `YouTube-Useful-Skin` folder.
 5. Navigate to any YouTube video — the custom skin is applied automatically.
 
-## ScreenShoot
-(image.png)
+## Screenshot
+
+![YouTube Custom Skin Preview](preview.png)
 
 ## File Structure
 
