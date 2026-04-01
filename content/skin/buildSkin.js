@@ -155,17 +155,19 @@ export function attachSeekDrag(areaEl, trackEl, fillEl, thumbEl, docRef, video, 
     video.currentTime = p0 * (video.duration || 0);
     fillEl.style.width = (p0 * 100) + '%';
     thumbEl.style.left = (p0 * 100) + '%';
+    let dragPct = p0;
     const onMove = (ev) => {
       const p = pctFrom(ev);
+      dragPct = p;
       fillEl.style.width = (p * 100) + '%';
       thumbEl.style.left = (p * 100) + '%';
       if (tooltipEl) {
         tooltipEl.textContent = fmtTime(p * (video.duration || 0));
         tooltipEl.style.left = (p * 100) + '%';
       }
-      video.currentTime = p * (video.duration || 0);
     };
     const onUp = () => {
+      video.currentTime = dragPct * (video.duration || 0);
       onEnd();
       docRef.removeEventListener('mousemove', onMove);
       docRef.removeEventListener('mouseup', onUp);
@@ -194,7 +196,12 @@ export function renderCCItems(containerEl, doc, itemCls, checkCls, tracks, curre
   tracks.forEach((t) => {
     const item = doc.createElement('div');
     item.className = itemCls + (current?.languageCode === t.languageCode ? ' active' : '');
-    item.innerHTML = `<span class="${checkCls}">${ICONS.check}</span><span>${t.displayName || t.languageName || t.languageCode || 'Unknown'}</span>`;
+    const checkSpan = doc.createElement('span');
+    checkSpan.className = checkCls;
+    checkSpan.innerHTML = ICONS.check;
+    const labelSpan = doc.createElement('span');
+    labelSpan.textContent = t.displayName || t.languageName || t.languageCode || 'Unknown';
+    item.append(checkSpan, labelSpan);
     item.addEventListener('click', (e) => { e.stopPropagation(); onSelect(t); });
     containerEl.append(item);
   });

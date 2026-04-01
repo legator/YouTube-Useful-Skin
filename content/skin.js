@@ -13,6 +13,8 @@
 
   let _bridgeReadyResolve;
   const bridgeReady = new Promise(res => { _bridgeReadyResolve = res; });
+  /* Fallback: resolve after 5 s so per-call timeouts can handle failures */
+  setTimeout(() => _bridgeReadyResolve(), 5000);
 
   window.addEventListener('message', (e) => {
     if (e.source !== window) return;
@@ -64,12 +66,16 @@
   /* Module state */
   let skinInjected = false;
   let seeking = false;
+  let cleanupSkin = null;
 
   function injectSkin() {
     const player = qs('.html5-video-player');
     const video = qs('video.html5-main-video');
     if (!player || !video) return;
     if (skinInjected && player.querySelector('.ytp-skin-top-bar')) return;
+
+    /* Tear down previous instance before re-injecting */
+    if (cleanupSkin) { cleanupSkin(); cleanupSkin = null; }
 
     /* clean up previous injection if navigated */
     player.querySelectorAll('.ytp-skin-top-bar, .ytp-skin-bottom-bar').forEach(e => e.remove());
@@ -143,17 +149,8 @@
           /* Verify URL is reachable before committing */
           const testUrl = storyboardUrl(parsed, 0);
           const img = new Image();
-          img.onload = () => {
-            storyboardData = parsed;
-            console.log('[YTP-Skin] Storyboard ready:', parsed.w + 'x' + parsed.h,
-                        parsed.totalThumbnails, 'frames');
-          };
-          img.onerror = () => {
-            /* Image failed — still keep the parsed data; the URL might work for
-               individual frames even if sheet 0 is temporarily unavailable. */
-            storyboardData = parsed;
-            console.warn('[YTP-Skin] Storyboard sheet 0 failed to preload, keeping data anyway');
-          };
+          img.onload = () => { storyboardData = parsed; };
+          img.onerror = () => { storyboardData = parsed; };
           img.src = testUrl;
           return; /* Done — onload/onerror will finalise */
         }
@@ -162,10 +159,7 @@
       /* Spec not available yet — schedule a retry (up to 5 attempts) */
       storyboardRetries++;
       if (storyboardRetries < 5) {
-        console.log('[YTP-Skin] Storyboard not available yet, retry', storyboardRetries, '/ 5');
         setTimeout(loadStoryboard, 3000);
-      } else {
-        console.warn('[YTP-Skin] Storyboard unavailable after 5 retries');
       }
     }
 
@@ -195,12 +189,13 @@
 
     /* Load storyboard early */
     setTimeout(loadStoryboard, 2000);
-    video.addEventListener('loadeddata', () => {
+    function onStoryboardLoadedData() {
       /* Reset for new video */
       storyboardData = null;
       storyboardRetries = 0;
       setTimeout(loadStoryboard, 1500);
-    });
+    }
+    video.addEventListener('loadeddata', onStoryboardLoadedData);
 
     ui.seekArea.addEventListener('mousemove', (e) => {
       if (seeking) return;
@@ -394,8 +389,9 @@
     }
 
     /* close menus when clicking elsewhere */
-    player.addEventListener('click', () => closeAllMenus());
-    document.addEventListener('click', () => closeAllMenus());
+    const docClickHandler = () => closeAllMenus();
+    player.addEventListener('click', docClickHandler);
+    document.addEventListener('click', docClickHandler);
 
     /* ---- Speed menu ---- */
     function syncSpeedBadge() {
@@ -508,7 +504,11 @@
         const isActive = currentTime >= ch.startTime && currentTime < nextStart;
 
         const timeStr = fmtTime(ch.startTime);
-        item.innerHTML = `<span class="ytp-skin-chap-time">${timeStr}</span><span class="ytp-skin-chap-title">${ch.title}</span>`;
+        const timeSpan = ce('span', 'ytp-skin-chap-time');
+        timeSpan.textContent = timeStr;
+        const titleSpan = ce('span', 'ytp-skin-chap-title');
+        titleSpan.textContent = ch.title;
+        item.append(timeSpan, titleSpan);
         if (isActive) item.classList.add('active');
 
         item.addEventListener('click', (e) => {
@@ -711,7 +711,7 @@
     syncPipBtn();
 
     /* ---- Media Session API ---- */
-    setupMediaSession({ video, player, ui, SKIP_SECONDS, updateMeta });
+    const cleanupMediaSession = setupMediaSession({ video, player, ui, SKIP_SECONDS });
 
     /* ---- fullscreen ---- */
     ui.btnFS.addEventListener('click', () => {
@@ -763,20 +763,44 @@
     });
 
     /* keep controls visible while paused */
-    video.addEventListener('pause', () => player.classList.add('ytp-skin-controls-visible'));
-    video.addEventListener('play', () => {
+    const onVideoPause = () => player.classList.add('ytp-skin-controls-visible');
+    const onVideoPlay = () => {
       hideTimeout = setTimeout(() => player.classList.remove('ytp-skin-controls-visible'), 3000);
-    });
+    };
+    video.addEventListener('pause', onVideoPause);
+    video.addEventListener('play', onVideoPlay);
 
     /* ---- cleanup on navigation ---- */
     const observer = new MutationObserver(() => {
       if (!document.contains(player)) {
-        clearInterval(metaInterval);
+        if (cleanupSkin) { cleanupSkin(); cleanupSkin = null; }
         observer.disconnect();
-        skinInjected = false;
       }
     });
     observer.observe(document.body, { childList: true, subtree: true });
+
+    cleanupSkin = function () {
+      skinInjected = false;
+      clearInterval(metaInterval);
+      clearTimeout(hideTimeout);
+      cleanupMediaSession?.();
+      video.removeEventListener('timeupdate', updateProgress);
+      video.removeEventListener('loadedmetadata', updateProgress);
+      video.removeEventListener('durationchange', updateProgress);
+      video.removeEventListener('loadeddata', onStoryboardLoadedData);
+      video.removeEventListener('play', syncPlayBtn);
+      video.removeEventListener('pause', syncPlayBtn);
+      video.removeEventListener('volumechange', syncVolBtn);
+      video.removeEventListener('ratechange', syncSpeedBadge);
+      video.removeEventListener('pause', onVideoPause);
+      video.removeEventListener('play', onVideoPlay);
+      video.removeEventListener('enterpictureinpicture', syncPipBtn);
+      video.removeEventListener('leavepictureinpicture', syncPipBtn);
+      document.removeEventListener('click', docClickHandler);
+      document.removeEventListener('fullscreenchange', syncFSIcon);
+      document.removeEventListener('webkitfullscreenchange', syncFSIcon);
+      observer.disconnect();
+    };
   }
 
   /* ==========================================================

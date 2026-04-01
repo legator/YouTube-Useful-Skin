@@ -6,10 +6,10 @@
  * @param {HTMLElement}      ctx.player   - .html5-video-player element
  * @param {object}           ctx.ui       - skin UI refs
  * @param {number}           ctx.SKIP_SECONDS
- * @param {Function}         ctx.updateMeta - called to refresh Media Session metadata
+ * @returns {Function} cleanup — call to remove listeners and clear the interval
  */
-export function setupMediaSession({ video, player, ui, SKIP_SECONDS, updateMeta }) {
-  if (!('mediaSession' in navigator)) return;
+export function setupMediaSession({ video, player, ui, SKIP_SECONDS }) {
+  if (!('mediaSession' in navigator)) return () => {};
 
   function updateMediaMeta() {
     try {
@@ -65,10 +65,25 @@ export function setupMediaSession({ video, player, ui, SKIP_SECONDS, updateMeta 
   updateMediaMeta();
   updatePositionState();
 
+  function onLoadedData() { updateMediaMeta(); updatePositionState(); }
+
   video.addEventListener('timeupdate', updatePositionState);
-  video.addEventListener('loadeddata', () => { updateMediaMeta(); updatePositionState(); });
+  video.addEventListener('loadeddata', onLoadedData);
   video.addEventListener('ratechange', updatePositionState);
 
   const metaSessionInterval = setInterval(updateMediaMeta, 5000);
-  video.addEventListener('emptied', () => clearInterval(metaSessionInterval));
+
+  return function cleanup() {
+    clearInterval(metaSessionInterval);
+    video.removeEventListener('timeupdate', updatePositionState);
+    video.removeEventListener('loadeddata', onLoadedData);
+    video.removeEventListener('ratechange', updatePositionState);
+    try { navigator.mediaSession.setActionHandler('play', null); } catch (_) {}
+    try { navigator.mediaSession.setActionHandler('pause', null); } catch (_) {}
+    try { navigator.mediaSession.setActionHandler('seekbackward', null); } catch (_) {}
+    try { navigator.mediaSession.setActionHandler('seekforward', null); } catch (_) {}
+    try { navigator.mediaSession.setActionHandler('seekto', null); } catch (_) {}
+    try { navigator.mediaSession.setActionHandler('previoustrack', null); } catch (_) {}
+    try { navigator.mediaSession.setActionHandler('nexttrack', null); } catch (_) {}
+  };
 }

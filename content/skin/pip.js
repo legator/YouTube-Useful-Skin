@@ -138,7 +138,6 @@ export async function openDocumentPip({ video, ui, bridgeCall, cachedChapters, l
   const pipChapMenu = pipWin.document.createElement('div');
   pipChapMenu.className = 'pip-menu';
   pipChapWrap.append(pipChapBtn, pipChapMenu);
-  if (cachedChapters.length === 0) pipChapWrap.style.display = 'none';
 
   ctrlRow.append(pipVolWrap, pipCCWrap, pipHDWrap, pipSpeedWrap, pipBtnPrev, pipBtnPlay, pipBtnNext, pipChapWrap);
 
@@ -363,7 +362,13 @@ export async function openDocumentPip({ video, ui, bridgeCall, cachedChapters, l
       const isActive = curTime >= ch.startTime && curTime < nextStart;
       const item = pipWin.document.createElement('div');
       item.className = 'pip-menu-item' + (isActive ? ' active' : '');
-      item.innerHTML = `<span class="pip-chap-time">${fmtTime(ch.startTime)}</span><span class="pip-chap-title">${ch.title}</span>`;
+      const timeSpan = pipWin.document.createElement('span');
+      timeSpan.className = 'pip-chap-time';
+      timeSpan.textContent = fmtTime(ch.startTime);
+      const titleSpan = pipWin.document.createElement('span');
+      titleSpan.className = 'pip-chap-title';
+      titleSpan.textContent = ch.title;
+      item.append(timeSpan, titleSpan);
       item.addEventListener('click', (e) => { e.stopPropagation(); video.currentTime = ch.startTime; closePipMenus(); });
       pipChapMenu.append(item);
     });
@@ -515,6 +520,10 @@ export async function openDocumentPip({ video, ui, bridgeCall, cachedChapters, l
   /* Handle the PiP window being closed by the browser X button */
   pipWin.addEventListener('pagehide', () => {
     try {
+      video.removeEventListener('play', syncPipPlay);
+      video.removeEventListener('pause', syncPipPlay);
+      video.removeEventListener('volumechange', syncPipVol);
+      video.removeEventListener('timeupdate', syncPipProgress);
       if (videoParent && !videoParent.contains(video)) {
         if (videoNext) {
           videoParent.insertBefore(video, videoNext);

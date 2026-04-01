@@ -40,7 +40,8 @@ export function getChapters(ytP, payload, reply) {
             macro.contents.forEach((item) => {
               const mr = item.macroMarkersListItemRenderer;
               if (mr) {
-                const startSec = parseInt(mr.timeDescription?.simpleText?.split(':').reduce((a, b) => a * 60 + parseInt(b, 10), 0), 10) || 0;
+                const timeParts = mr.timeDescription?.simpleText?.split(':');
+                const startSec = timeParts ? timeParts.reduce((a, b) => a * 60 + parseInt(b, 10), 0) : 0;
                 const title = mr.title?.simpleText || mr.title?.runs?.map(r => r.text).join('') || '';
                 const onTap = mr.onTap?.watchEndpoint?.startTimeSeconds;
                 chapters.push({ startTime: onTap != null ? onTap : startSec, title });

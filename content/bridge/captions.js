@@ -48,10 +48,14 @@ export function setCaptions(ytP, payload, reply) {
   try {
     if (track && track.languageCode) {
       ytP.loadModule('captions');
-      /* Small delay to ensure module is loaded */
-      setTimeout(() => {
-        try { ytP.setOption('captions', 'track', track); } catch (_) {}
-      }, 100);
+      /* Poll until the module accepts the option (up to 10 × 200 ms = 2 s) */
+      (function trySetCaption(attempts) {
+        try {
+          ytP.setOption('captions', 'track', track);
+        } catch (_) {
+          if (attempts < 10) setTimeout(() => trySetCaption(attempts + 1), 200);
+        }
+      })(0);
     } else {
       try { ytP.setOption('captions', 'track', {}); } catch (_) {}
       try { ytP.unloadModule('captions'); } catch (_) {}
