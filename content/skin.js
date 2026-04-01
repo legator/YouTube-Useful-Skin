@@ -1,4 +1,4 @@
-﻿/* ============================================================
+/* ============================================================
    YouTube Custom Player Skin — Content Script (entry point)
    Imports sub-modules, wires the YouTube player overlay, and
    handles SPA navigation re-injection.
@@ -678,7 +678,8 @@
     }
     /* Delay a bit to ensure player response is available */
     setTimeout(initChapters, 1500);
-    video.addEventListener('loadeddata', () => setTimeout(initChapters, 1000));
+    const onLoadedDataInitChapters = () => setTimeout(initChapters, 1000);
+    video.addEventListener('loadeddata', onLoadedDataInitChapters);
 
     /* ---- Quality badge label sync ---- */
     async function updateQualityBadge() {
@@ -834,12 +835,13 @@
         if (!video.paused) player.classList.remove('ytp-skin-controls-visible');
       }, 3000);
     }
-    player.addEventListener('mousemove', showControls);
-    player.addEventListener('mouseenter', showControls);
-    player.addEventListener('mouseleave', () => {
+    const onPlayerMouseLeave = () => {
       clearTimeout(hideTimeout);
       player.classList.remove('ytp-skin-controls-visible');
-    });
+    };
+    player.addEventListener('mousemove', showControls);
+    player.addEventListener('mouseenter', showControls);
+    player.addEventListener('mouseleave', onPlayerMouseLeave);
 
     /* keep controls visible while paused */
     const onVideoPause = () => player.classList.add('ytp-skin-controls-visible');
@@ -875,6 +877,11 @@
       video.removeEventListener('play', onVideoPlay);
       video.removeEventListener('enterpictureinpicture', syncPipBtn);
       video.removeEventListener('leavepictureinpicture', syncPipBtn);
+      video.removeEventListener('loadeddata', onLoadedDataInitChapters);
+      player.removeEventListener('click', docClickHandler);
+      player.removeEventListener('mousemove', showControls);
+      player.removeEventListener('mouseenter', showControls);
+      player.removeEventListener('mouseleave', onPlayerMouseLeave);
       document.removeEventListener('click', docClickHandler);
       document.removeEventListener('fullscreenchange', syncFSIcon);
       document.removeEventListener('webkitfullscreenchange', syncFSIcon);

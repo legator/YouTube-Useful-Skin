@@ -44,7 +44,9 @@ export function getCaptions(ytP, payload, reply) {
 
 export function setCaptions(ytP, payload, reply) {
   if (!ytP) { reply({ ok: false }); return; }
-  const track = payload.track;
+  /* If the track came from mapCaptionTracks(), use the original object the
+     player API recognises; fall back to the mapped wrapper otherwise. */
+  const track = payload.track?._raw ?? payload.track;
   try {
     if (track && track.languageCode) {
       ytP.loadModule('captions');
