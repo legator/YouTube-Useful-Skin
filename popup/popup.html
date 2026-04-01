@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      width: 260px;
+      font-family: 'Segoe UI', Roboto, Arial, sans-serif;
+      background: #1a1a1a;
+      color: #eee;
+      padding: 16px;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+    .header img { width: 28px; height: 28px; }
+    .header h1 {
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+    }
+    .toggle-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 0;
+      border-top: 1px solid #333;
+    }
+    .toggle-row label {
+      font-size: 13px;
+      cursor: pointer;
+    }
+    /* toggle switch */
+    .switch {
+      position: relative;
+      width: 42px;
+      height: 22px;
+    }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .slider {
+      position: absolute;
+      inset: 0;
+      background: #555;
+      border-radius: 22px;
+      cursor: pointer;
+      transition: background 0.25s;
+    }
+    .slider::before {
+      content: '';
+      position: absolute;
+      width: 16px;
+      height: 16px;
+      left: 3px;
+      bottom: 3px;
+      background: #fff;
+      border-radius: 50%;
+      transition: transform 0.25s;
+    }
+    .switch input:checked + .slider { background: #e53935; }
+    .switch input:checked + .slider::before { transform: translateX(20px); }
+    .info {
+      margin-top: 14px;
+      font-size: 11px;
+      color: #888;
+      line-height: 1.5;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <img src="../icons/icon48.png" alt="icon">
+    <h1>YT Player Skin</h1>
+  </div>
+
+  <div class="toggle-row">
+    <label for="skinToggle">Enable custom skin</label>
+    <div class="switch">
+      <input type="checkbox" id="skinToggle" checked>
+      <span class="slider"></span>
+    </div>
+  </div>
+
+  <div class="info">
+    Toggle the custom cinematic player skin on YouTube. Reload the page after changing this setting.
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

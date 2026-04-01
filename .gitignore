@@ -1,0 +1,17 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+*.suo
+*.user
+
+# Node (generate-icons.js dependencies, if any)
+node_modules/
+
+# Build output
+dist/
+
+# Logs
+*.log

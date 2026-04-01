@@ -1,0 +1,834 @@
+/*  ============================================================
+    YouTube Custom Player Skin — CSS
+    Matches the cinematic overlay style from the reference design:
+      • Dark gradient top bar with title + channel + view count
+      • Centred transport controls (play, CC, HD, volume, etc.)
+      • Thin red progress bar at the very bottom
+    ============================================================ */
+
+/* ---------- scope everything under our wrapper ---------- */
+
+/* ===== HIDE DEFAULT YOUTUBE CHROME ===== */
+
+/* Hide the default bottom gradient */
+.ytp-gradient-bottom {
+  display: none !important;
+}
+
+/* Hide the default top gradient */
+.ytp-gradient-top {
+  display: none !important;
+}
+
+/* Hide default chrome bottom bar (visually hidden but still clickable for API) */
+.html5-video-player .ytp-chrome-bottom {
+  opacity: 0 !important;
+  pointer-events: none !important;
+  position: absolute !important;
+  z-index: -1 !important;
+}
+
+/* When native Fullscreen API is used, ensure the player fills the viewport */
+#movie_player:fullscreen,
+.html5-video-player:fullscreen {
+  width: 100vw !important;
+  height: 100vh !important;
+  max-width: none !important;
+  max-height: none !important;
+}
+
+#movie_player:fullscreen video,
+.html5-video-player:fullscreen video {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: contain !important;
+}
+
+/* Hide default chrome top bar */
+.html5-video-player .ytp-chrome-top {
+  opacity: 0 !important;
+  pointer-events: none !important;
+  position: absolute !important;
+  z-index: -1 !important;
+}
+
+/* Hide the big play button overlay */
+.html5-video-player .ytp-large-play-button {
+  display: none !important;
+}
+
+/* Hide default YouTube bezel (volume/play feedback animation) */
+.html5-video-player .ytp-bezel-text-wrapper,
+.html5-video-player .ytp-bezel {
+  display: none !important;
+}
+
+/* ===== CUSTOM SKIN OVERLAY ===== */
+
+/* --- Top Bar --- */
+.ytp-skin-top-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 60;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 14px 20px 30px 20px;
+  background: linear-gradient(to bottom, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.0) 100%);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  font-family: 'Segoe UI', Roboto, Arial, sans-serif;
+}
+
+.html5-video-player:hover .ytp-skin-top-bar,
+.html5-video-player.ytp-skin-controls-visible .ytp-skin-top-bar {
+  opacity: 1;
+}
+
+.ytp-skin-top-left {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 75%;
+}
+
+.ytp-skin-title {
+  color: #fff;
+  font-size: 16px;
+  font-weight: 600;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.7);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: 0.3px;
+}
+
+.ytp-skin-channel {
+  color: #ccc;
+  font-size: 12px;
+  font-weight: 400;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.6);
+}
+
+.ytp-skin-views {
+  color: #fff;
+  font-size: 14px;
+  font-weight: 400;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.7);
+  white-space: nowrap;
+  align-self: flex-start;
+  padding-top: 2px;
+}
+
+/* --- Bottom Controls Area --- */
+.ytp-skin-bottom-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: linear-gradient(to top, rgba(0,0,0,0.72) 0%, rgba(0,0,0,0.0) 100%);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  padding-bottom: 0;
+  font-family: 'Segoe UI', Roboto, Arial, sans-serif;
+}
+
+.html5-video-player:hover .ytp-skin-bottom-bar,
+.html5-video-player.ytp-skin-controls-visible .ytp-skin-bottom-bar {
+  opacity: 1;
+}
+
+/* --- Centre Transport Controls --- */
+.ytp-skin-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 0 10px 0;
+  pointer-events: auto;
+}
+
+.ytp-skin-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: transform 0.15s ease, color 0.15s ease;
+  opacity: 0.9;
+  box-sizing: border-box;
+  height: 28px;
+}
+
+.ytp-skin-btn:hover {
+  transform: scale(1.15);
+  opacity: 1;
+}
+
+.ytp-skin-btn svg {
+  width: 26px;
+  height: 26px;
+  fill: currentColor;
+}
+
+/* Small icon buttons */
+.ytp-skin-btn.small svg {
+  width: 22px;
+  height: 22px;
+}
+
+/* Play/Pause — the big centred circle */
+.ytp-skin-btn-play {
+  width: 52px;
+  height: 52px;
+  border: 2.5px solid #fff;
+  border-radius: 50%;
+  margin: 0 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.25);
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.ytp-skin-btn-play:hover {
+  background: rgba(255,255,255,0.12);
+}
+
+.ytp-skin-btn-play svg {
+  width: 28px;
+  height: 28px;
+  fill: #fff;
+  margin-left: 3px;  /* optical centre for play triangle */
+}
+
+.ytp-skin-btn-play.paused svg {
+  margin-left: 3px;
+}
+
+.ytp-skin-btn-play.playing svg {
+  margin-left: 0;
+}
+
+/* Square toggle buttons (theater, mini, etc.) */
+.ytp-skin-btn-square {
+  width: 28px;
+  height: 28px;
+  border: 2px solid rgba(255,255,255,0.7);
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  margin: 0 2px;
+  box-sizing: border-box;
+}
+
+.ytp-skin-btn-square:hover {
+  border-color: #fff;
+  background: rgba(255,255,255,0.1);
+}
+
+.ytp-skin-btn-square svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Skip forward/backward buttons */
+.ytp-skin-btn-skip {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: transparent;
+  transition: transform 0.15s ease, background 0.15s ease;
+  margin: 0 2px;
+}
+
+.ytp-skin-btn-skip svg {
+  width: 24px;
+  height: 24px;
+  fill: #fff;
+}
+
+.ytp-skin-btn-skip:hover {
+  background: rgba(255,255,255,0.1);
+}
+
+.ytp-skin-btn-skip:active {
+  transform: scale(0.92);
+}
+
+/* PiP active state */
+.ytp-skin-btn-square.ytp-skin-pip-active {
+  border-color: #e53935;
+  background: rgba(229, 57, 53, 0.2);
+}
+
+.ytp-skin-btn-square.ytp-skin-pip-active:hover {
+  background: rgba(229, 57, 53, 0.35);
+  border-color: #f44336;
+}
+
+/* CC & HD text badges */
+.ytp-skin-badge {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  border: 2px solid rgba(255,255,255,0.7);
+  border-radius: 3px;
+  padding: 2px 5px;
+  line-height: 1;
+  color: #fff;
+  cursor: pointer;
+  user-select: none;
+  transition: border-color 0.15s, background 0.15s;
+  pointer-events: auto;
+  box-sizing: border-box;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ytp-skin-badge:hover {
+  border-color: #fff;
+  background: rgba(255,255,255,0.12);
+}
+
+.ytp-skin-badge.active {
+  background: rgba(255,255,255,0.18);
+  border-color: #fff;
+}
+
+.ytp-skin-badge-hd sup {
+  font-size: 8px;
+  vertical-align: super;
+  margin-left: 1px;
+}
+
+/* ===== VOLUME SLIDER POPUP ===== */
+.ytp-skin-vol-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  pointer-events: auto;
+}
+
+.ytp-skin-vol-popup {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 38px;
+  padding: 12px 0 8px 0;
+  background: rgba(0,0,0,0.88);
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  transform: translateX(-50%) translateY(6px);
+  margin-bottom: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+}
+
+.ytp-skin-vol-popup.visible {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(-50%) translateY(0);
+}
+
+.ytp-skin-vol-track {
+  width: 4px;
+  height: 90px;
+  background: rgba(255,255,255,0.25);
+  border-radius: 2px;
+  position: relative;
+  cursor: pointer;
+}
+
+.ytp-skin-vol-fill {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: #e53935;
+  border-radius: 2px;
+  pointer-events: none;
+}
+
+.ytp-skin-vol-thumb {
+  position: absolute;
+  left: 50%;
+  bottom: 100%;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #fff;
+  transform: translate(-50%, 50%);
+  box-shadow: 0 0 4px rgba(0,0,0,0.5);
+  pointer-events: none;
+  transition: width 0.1s, height 0.1s;
+}
+
+.ytp-skin-vol-track:hover .ytp-skin-vol-thumb {
+  width: 14px;
+  height: 14px;
+}
+
+.ytp-skin-vol-label {
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  text-align: center;
+  user-select: none;
+}
+
+/* ===== DROPDOWN MENUS (CC & Quality) ===== */
+.ytp-skin-menu-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  pointer-events: auto;
+}
+
+.ytp-skin-menu {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%) translateY(6px);
+  min-width: 170px;
+  max-height: 280px;
+  background: rgba(15,15,15,0.95);
+  border-radius: 8px;
+  padding: 6px 0;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  margin-bottom: 8px;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.55);
+  overflow-y: auto;
+  overflow-x: hidden;
+  z-index: 80;
+  font-family: 'Segoe UI', Roboto, Arial, sans-serif;
+}
+
+.ytp-skin-menu.visible {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* Scrollbar styling */
+.ytp-skin-menu::-webkit-scrollbar {
+  width: 5px;
+}
+.ytp-skin-menu::-webkit-scrollbar-track {
+  background: transparent;
+}
+.ytp-skin-menu::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.2);
+  border-radius: 3px;
+}
+
+.ytp-skin-menu-title {
+  color: #aaa;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  padding: 6px 14px 8px;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+  margin-bottom: 2px;
+  user-select: none;
+}
+
+.ytp-skin-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  color: #ddd;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.12s;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.ytp-skin-menu-item:hover {
+  background: rgba(255,255,255,0.08);
+  color: #fff;
+}
+
+.ytp-skin-menu-item.active {
+  color: #fff;
+  font-weight: 600;
+}
+
+.ytp-skin-menu-item.disabled {
+  color: #666;
+  cursor: default;
+  pointer-events: none;
+}
+
+.ytp-skin-menu-check {
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  flex-shrink: 0;
+}
+
+.ytp-skin-menu-check svg {
+  width: 16px;
+  height: 16px;
+  fill: #e53935;
+}
+
+.ytp-skin-menu-item.active .ytp-skin-menu-check {
+  opacity: 1;
+}
+
+.ytp-skin-hd-tag {
+  font-size: 9px;
+  font-weight: 700;
+  background: rgba(229, 57, 53, 0.8);
+  color: #fff;
+  padding: 1px 4px;
+  border-radius: 2px;
+  margin-left: auto;
+  letter-spacing: 0.4px;
+}
+
+/* --- Progress / Seek Bar --- */
+.ytp-skin-progress-wrap {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 12px;
+  pointer-events: auto;
+  box-sizing: border-box;
+  gap: 10px;
+}
+
+.ytp-skin-time {
+  color: #fff;
+  font-size: 12px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  min-width: 38px;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.6);
+  user-select: none;
+}
+
+.ytp-skin-time-left {
+  text-align: left;
+}
+
+.ytp-skin-time-right {
+  text-align: right;
+}
+
+.ytp-skin-seek {
+  flex: 1;
+  position: relative;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.ytp-skin-seek-track {
+  width: 100%;
+  height: 3px;
+  background: rgba(255,255,255,0.25);
+  border-radius: 1.5px;
+  position: relative;
+  overflow: visible;
+}
+
+.ytp-skin-seek-buffer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  background: rgba(255,255,255,0.3);
+  border-radius: 1.5px;
+  pointer-events: none;
+}
+
+.ytp-skin-seek-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  background: #e53935;
+  border-radius: 1.5px;
+  pointer-events: none;
+}
+
+.ytp-skin-seek-thumb {
+  position: absolute;
+  top: 50%;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: #e53935;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 4px rgba(0,0,0,0.5);
+  pointer-events: none;
+  transition: width 0.12s, height 0.12s;
+}
+
+.ytp-skin-seek:hover .ytp-skin-seek-thumb {
+  width: 16px;
+  height: 16px;
+}
+
+.ytp-skin-seek:hover .ytp-skin-seek-track {
+  height: 5px;
+}
+
+/* --- Tooltip for seek bar --- */
+.ytp-skin-seek-tooltip {
+  position: absolute;
+  bottom: 24px;
+  padding: 3px 7px;
+  background: rgba(0,0,0,0.82);
+  color: #fff;
+  font-size: 12px;
+  border-radius: 3px;
+  pointer-events: none;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.ytp-skin-seek:hover .ytp-skin-seek-tooltip {
+  opacity: 1;
+}
+
+/* --- Thumbnail preview on seek bar hover --- */
+.ytp-skin-seek-preview {
+  position: absolute;
+  bottom: 36px;
+  transform: translateX(-50%);
+  pointer-events: none;
+  display: none;
+  z-index: 85;
+  border-radius: 4px;
+  overflow: hidden;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.7);
+  border: 2px solid rgba(255,255,255,0.25);
+  background: #000;
+}
+
+.ytp-skin-seek-preview.visible {
+  display: block;
+}
+
+.ytp-skin-seek-preview-img {
+  display: block;
+  background-repeat: no-repeat;
+}
+
+/* ===== CUSTOM SPEED INPUT ===== */
+.ytp-skin-speed-custom {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-top: 1px solid rgba(255,255,255,0.1);
+  margin-top: 4px;
+}
+
+.ytp-skin-speed-input {
+  width: 56px;
+  background: rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.3);
+  border-radius: 3px;
+  color: #fff;
+  font-size: 12px;
+  padding: 4px 6px;
+  text-align: center;
+  outline: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.ytp-skin-speed-input:focus {
+  border-color: #e53935;
+  background: rgba(255,255,255,0.15);
+}
+
+/* Hide spin buttons */
+.ytp-skin-speed-input::-webkit-inner-spin-button,
+.ytp-skin-speed-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.ytp-skin-speed-apply {
+  background: #e53935;
+  border: none;
+  border-radius: 3px;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 10px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.ytp-skin-speed-apply:hover {
+  background: #f44336;
+}
+
+/* ===== SPEED BADGE ===== */
+.ytp-skin-badge-speed {
+  font-variant-numeric: tabular-nums;
+  min-width: 24px;
+  text-align: center;
+}
+
+/* ===== FULLSCREEN ADJUSTMENTS ===== */
+.html5-video-player.ytp-fullscreen .ytp-skin-title {
+  font-size: 20px;
+}
+
+.html5-video-player.ytp-fullscreen .ytp-skin-channel {
+  font-size: 14px;
+}
+
+.html5-video-player.ytp-fullscreen .ytp-skin-views {
+  font-size: 16px;
+}
+
+.html5-video-player.ytp-fullscreen .ytp-skin-btn-play {
+  width: 64px;
+  height: 64px;
+}
+
+.html5-video-player.ytp-fullscreen .ytp-skin-btn-play svg {
+  width: 34px;
+  height: 34px;
+}
+
+.html5-video-player.ytp-fullscreen .ytp-skin-controls {
+  gap: 14px;
+}
+
+/* ===== Disable skin when extension is toggled off ===== */
+.html5-video-player.ytp-skin-disabled .ytp-skin-top-bar,
+.html5-video-player.ytp-skin-disabled .ytp-skin-bottom-bar {
+  display: none !important;
+}
+
+.html5-video-player.ytp-skin-disabled .ytp-chrome-bottom,
+.html5-video-player.ytp-skin-disabled .ytp-chrome-top,
+.html5-video-player.ytp-skin-disabled .ytp-gradient-bottom,
+.html5-video-player.ytp-skin-disabled .ytp-gradient-top {
+  opacity: revert !important;
+  pointer-events: revert !important;
+  position: revert !important;
+  z-index: revert !important;
+  display: revert !important;
+}
+
+/* ===== CHAPTERS / TIMECODES ===== */
+
+/* Chapters button */
+.ytp-skin-btn-chapters {
+  width: 28px;
+  height: 28px;
+  border: 2px solid rgba(255,255,255,0.7);
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  margin: 0 2px;
+  box-sizing: border-box;
+}
+
+.ytp-skin-btn-chapters:hover {
+  border-color: #fff;
+  background: rgba(255,255,255,0.1);
+}
+
+.ytp-skin-btn-chapters svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Chapters menu extends from dropdown menu styles */
+.ytp-skin-chap-menu {
+  min-width: 240px;
+  max-height: 320px;
+}
+
+.ytp-skin-chap-item {
+  gap: 10px !important;
+}
+
+.ytp-skin-chap-time {
+  color: #e53935;
+  font-size: 12px;
+  font-weight: 600;
+  min-width: 40px;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+.ytp-skin-chap-title {
+  color: #ddd;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ytp-skin-menu-item.active .ytp-skin-chap-title {
+  color: #fff;
+}
+
+.ytp-skin-menu-item.active .ytp-skin-chap-time {
+  color: #ff6659;
+}
+
+/* Chapter markers on seek bar */
+.ytp-skin-chap-marker {
+  position: absolute;
+  top: 0;
+  width: 2px;
+  height: 100%;
+  background: rgba(255,255,255,0.5);
+  pointer-events: none;
+  transform: translateX(-50%);
+  z-index: 1;
+  border-radius: 1px;
+}
+
+.ytp-skin-seek:hover .ytp-skin-chap-marker {
+  background: rgba(255,255,255,0.7);
+}
