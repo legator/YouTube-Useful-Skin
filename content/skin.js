@@ -242,24 +242,12 @@
 
     /* ---- volume / mute ---- */
 
-    /* Restore saved volume */
-    chrome.storage.local.get(['volume', 'muted'], (r) => {
-      if (typeof r.volume === 'number') video.volume = r.volume;
-      if (typeof r.muted === 'boolean') video.muted = r.muted;
-    });
-
-    let volSaveTimer;
     function syncVolBtn() {
       ui.btnVol.innerHTML = volIcon(video.volume, video.muted);
       const pct = video.muted ? 0 : Math.round(video.volume * 100);
       ui.volSliderFill.style.height = pct + '%';
       ui.volSliderThumb.style.bottom = pct + '%';
       ui.volLabel.textContent = pct + '%';
-      /* Debounced save */
-      clearTimeout(volSaveTimer);
-      volSaveTimer = setTimeout(() => {
-        chrome.storage.local.set({ volume: video.volume, muted: video.muted });
-      }, 500);
     }
     video.addEventListener('volumechange', syncVolBtn);
     syncVolBtn();
