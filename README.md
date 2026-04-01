@@ -18,7 +18,7 @@ A Chrome extension that replaces the default YouTube player controls with a cine
 
 ## Screenshot
 
-![YouTube Custom Skin Preview](preview.png)
+![YouTube Custom Skin Preview](image.png)
 
 ## File Structure
 
