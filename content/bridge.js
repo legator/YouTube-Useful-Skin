@@ -24,6 +24,14 @@ const HANDLERS = {
   syncFullscreenState,
 };
 
+/* Get nonce from script tag data attribute for authentication */
+const scriptEl = document.getElementById('ytp-skin-bridge');
+const BRIDGE_NONCE = scriptEl?.dataset?.nonce || null;
+
+if (!BRIDGE_NONCE) {
+  console.error('[YTP-Skin Bridge] No nonce found - bridge will not respond to requests');
+}
+
 function getPlayer() {
   const el = document.getElementById('movie_player');
   if (el && typeof el.getAvailableQualityLevels === 'function') return el;
@@ -31,10 +39,16 @@ function getPlayer() {
 }
 
 window.addEventListener('message', (e) => {
-  /* Security: Validate message origin and structure */
+  /* Security: Validate message origin, structure, and nonce */
   if (e.source !== window) return;
   if (!e.data || typeof e.data !== 'object') return;
   if (e.data.source !== 'ytp-skin-request') return;
+  
+  /* Validate nonce to prevent unauthorized scripts from using this bridge */
+  if (!BRIDGE_NONCE || e.data.nonce !== BRIDGE_NONCE) {
+    console.warn('[YTP-Skin Bridge] Invalid nonce - rejecting request');
+    return;
+  }
 
   const { action, payload, id } = e.data;
   
@@ -47,7 +61,7 @@ window.addEventListener('message', (e) => {
   const ytP = getPlayer();
 
   function reply(data) {
-    window.postMessage({ source: 'ytp-skin-response', id, data }, '*');
+    window.postMessage({ source: 'ytp-skin-response', id, data, nonce: BRIDGE_NONCE }, '*');
   }
 
   try {
@@ -58,5 +72,5 @@ window.addEventListener('message', (e) => {
   }
 });
 
-/* Signal that the bridge is ready */
-window.postMessage({ source: 'ytp-skin-bridge-ready' }, '*');
+/* Signal that the bridge is ready (include nonce for validation) */
+window.postMessage({ source: 'ytp-skin-bridge-ready', nonce: BRIDGE_NONCE }, '*');

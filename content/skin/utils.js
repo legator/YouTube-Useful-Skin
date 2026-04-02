@@ -12,8 +12,8 @@ export const ce = (tag, cls, html) => {
   return el;
 };
 
-/** Sanitizes text content to prevent XSS */
-export const sanitizeText = (text) => {
+/** Escapes text for safe HTML insertion (converts special chars to entities) */
+export const escapeHtml = (text) => {
   if (!text) return '';
   const div = document.createElement('div');
   div.textContent = text;

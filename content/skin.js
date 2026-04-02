@@ -10,42 +10,29 @@
   /* Bridge client — singleton, persists across SPA navigations */
   let bridgeMsgId = 0;
   const bridgeCallbacks = new Map();
+  
+  /* Generate a unique nonce for secure bridge communication */
+  const bridgeNonce = crypto.randomUUID();
 
   let _bridgeReadyResolve;
   const bridgeReady = new Promise(res => { _bridgeReadyResolve = res; });
-  
-  /* Import timing constants */
-  const TIMING = {
-    BRIDGE_READY_TIMEOUT: 5000,
-    BRIDGE_CALL_TIMEOUT: 2000,
-    METADATA_UPDATE_INTERVAL: 2000,
-    STORYBOARD_INITIAL_DELAY: 2000,
-    STORYBOARD_RETRY_DELAY: 3000,
-    STORYBOARD_RELOAD_DELAY: 1500,
-    CONTROLS_HIDE_DELAY: 3000,
-    VOLUME_SAVE_DEBOUNCE: 500,
-    QUALITY_UPDATE_DELAY: 500,
-    CHAPTERS_INIT_DELAY: 1500,
-    CHAPTERS_RELOAD_DELAY: 1000,
-    CC_RESTORE_DELAY: 1500,
-    QUALITY_BADGE_UPDATE_DELAY: 1000,
-    NAV_DETECT_DELAY: 500,
-  };
   
   /* Fallback: resolve after timeout so per-call timeouts can handle failures */
   setTimeout(() => _bridgeReadyResolve(), TIMING.BRIDGE_READY_TIMEOUT);
 
   window.addEventListener('message', (e) => {
-    /* Security: Validate message origin and structure */
+    /* Security: Validate message origin, structure, and nonce */
     if (e.source !== window) return;
     if (!e.data || typeof e.data !== 'object') return;
     
-    if (e.data.source === 'ytp-skin-bridge-ready') { 
+    if (e.data.source === 'ytp-skin-bridge-ready') {
+      if (e.data.nonce !== bridgeNonce) return; /* Validate nonce */
       _bridgeReadyResolve(); 
       return; 
     }
     
     if (e.data.source !== 'ytp-skin-response') return;
+    if (e.data.nonce !== bridgeNonce) return; /* Validate nonce */
     
     const cb = bridgeCallbacks.get(e.data.id);
     if (cb) { 
@@ -58,7 +45,7 @@
     return bridgeReady.then(() => new Promise((resolve) => {
       const id = ++bridgeMsgId;
       bridgeCallbacks.set(id, resolve);
-      window.postMessage({ source: 'ytp-skin-request', action, payload, id }, '*');
+      window.postMessage({ source: 'ytp-skin-request', action, payload, id, nonce: bridgeNonce }, '*');
       /* Timeout protection */
       setTimeout(() => { 
         if (bridgeCallbacks.has(id)) { 
@@ -76,6 +63,8 @@
     s.id = 'ytp-skin-bridge';
     s.type = 'module';
     s.src = chrome.runtime.getURL('content/bridge.js');
+    /* Pass nonce to bridge via data attribute */
+    s.dataset.nonce = bridgeNonce;
     (document.head || document.documentElement).appendChild(s);
   }
   injectBridge();
@@ -85,7 +74,7 @@
   const [
     { ICONS, volIcon },
     { qs, ce, fmtTime },
-    { QUALITY_LABELS, HD_QUALITIES, SPEED_OPTIONS, SKIP_SECONDS },
+    { QUALITY_LABELS, HD_QUALITIES, SPEED_OPTIONS, SKIP_SECONDS, TIMING },
     { buildSkin, attachSeekDrag, renderCCItems, renderQualityItems },
     { parseStoryboardSpec, storyboardUrl, storyboardFrame },
     { openDocumentPip, openBasicPip },
@@ -155,7 +144,7 @@
         const views = viewInfo ? viewInfo.textContent.trim() : '';
         
         /* Only update DOM if content actually changed (performance optimization) */
-        const metaHash = title + '|' + channel + '|' + views;
+        const metaHash = JSON.stringify([title, channel, views]);
         if (metaHash !== lastMetaHash) {
           ui.titleEl.textContent = title;
           ui.channelEl.textContent = channel;
@@ -637,6 +626,8 @@
     /* ---- Chapters / Timecodes menu ---- */
     let cachedChapters = [];
     let lastActiveChapterIdx = -1; /* Track active chapter for efficient updates */
+    let userInteractingWithMenu = false; /* Track if user is scrolling/browsing menu */
+    let menuInteractionTimer = null;
 
     async function loadChapters() {
       const result = await bridgeCall('getChapters', {});
@@ -704,6 +695,15 @@
       }
     }
 
+    /* Track user interaction with chapter menu */
+    function onChapterMenuInteraction() {
+      userInteractingWithMenu = true;
+      clearTimeout(menuInteractionTimer);
+      menuInteractionTimer = setTimeout(() => {
+        userInteractingWithMenu = false;
+      }, 2000); /* User hasn't interacted for 2s */
+    }
+
     /* Update chapter menu highlighting when time changes (optimized) */
     function updateChapterMenuHighlight() {
       if (!ui.chapMenu.classList.contains('visible')) return;
@@ -733,12 +733,21 @@
       if (currentActive) currentActive.classList.remove('active');
       if (targetItem) {
         targetItem.classList.add('active');
-        /* Scroll to newly active chapter with accessibility support */
-        requestAnimationFrame(() => {
-          const prefersReducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-          const scrollBehavior = prefersReducedMotion ? 'auto' : 'smooth';
-          targetItem.scrollIntoView({ behavior: scrollBehavior, block: 'center' });
-        });
+        
+        /* Only auto-scroll if user is not interacting and item is out of viewport */
+        if (!userInteractingWithMenu) {
+          const menuRect = ui.chapMenuList.getBoundingClientRect();
+          const itemRect = targetItem.getBoundingClientRect();
+          const isOutOfView = itemRect.top < menuRect.top || itemRect.bottom > menuRect.bottom;
+          
+          if (isOutOfView) {
+            requestAnimationFrame(() => {
+              const prefersReducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+              const scrollBehavior = prefersReducedMotion ? 'auto' : 'smooth';
+              targetItem.scrollIntoView({ behavior: scrollBehavior, block: 'center' });
+            });
+          }
+        }
       }
 
       lastActiveChapterIdx = activeIdx;
@@ -750,10 +759,16 @@
       closeAllMenus();
       if (!isOpen) {
         lastActiveChapterIdx = -1; /* Reset cache when opening menu */
+        userInteractingWithMenu = false; /* Reset interaction state */
         buildChaptersMenu();
         ui.chapMenu.classList.add('visible');
       }
     });
+
+    /* Wire up interaction tracking for chapter menu */
+    ui.chapMenuList.addEventListener('scroll', onChapterMenuInteraction, { passive: true });
+    ui.chapMenuList.addEventListener('mouseenter', onChapterMenuInteraction);
+    ui.chapMenuList.addEventListener('touchstart', onChapterMenuInteraction, { passive: true });
 
     /* ---- Chapter menu pin + drag ---- */
     function unpinChapMenu() {
