@@ -148,6 +148,9 @@
       /* current chapter name */
       const activeChap = getChapterAtTime(cur);
       ui.chapNameEl.textContent = activeChap ? activeChap.title : '';
+
+      /* Update chapter menu highlight if visible */
+      updateChapterMenuHighlight();
     }
     video.addEventListener('timeupdate', updateProgress);
     video.addEventListener('loadedmetadata', updateProgress);
@@ -594,9 +597,11 @@
 
       const dur = video.duration || 0;
       const currentTime = video.currentTime || 0;
+      let activeItem = null;
 
       chapters.forEach((ch, idx) => {
         const item = ce('div', 'ytp-skin-menu-item ytp-skin-chap-item');
+        item.dataset.chapterIndex = idx; // Store index for updates
 
         /* Determine if this chapter is the currently active one */
         const nextStart = idx + 1 < chapters.length ? chapters[idx + 1].startTime : dur;
@@ -608,7 +613,10 @@
         const titleSpan = ce('span', 'ytp-skin-chap-title');
         titleSpan.textContent = ch.title;
         item.append(timeSpan, titleSpan);
-        if (isActive) item.classList.add('active');
+        if (isActive) {
+          item.classList.add('active');
+          activeItem = item;
+        }
 
         item.addEventListener('click', (e) => {
           e.stopPropagation();
@@ -616,6 +624,51 @@
           if (!chapPinned) closeAllMenus();
         });
         ui.chapMenuList.append(item);
+      });
+
+      /* Scroll to active chapter */
+      if (activeItem) {
+        requestAnimationFrame(() => {
+          activeItem.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        });
+      }
+    }
+
+    /* Update chapter menu highlighting when time changes */
+    function updateChapterMenuHighlight() {
+      if (!ui.chapMenu.classList.contains('visible')) return;
+      
+      const dur = video.duration || 0;
+      const currentTime = video.currentTime || 0;
+      const chapters = cachedChapters;
+
+      if (chapters.length === 0) return;
+
+      /* Find current active chapter */
+      let activeIdx = -1;
+      for (let i = 0; i < chapters.length; i++) {
+        const nextStart = i + 1 < chapters.length ? chapters[i + 1].startTime : dur;
+        if (currentTime >= chapters[i].startTime && currentTime < nextStart) {
+          activeIdx = i;
+          break;
+        }
+      }
+
+      /* Update highlights */
+      const items = ui.chapMenuList.querySelectorAll('.ytp-skin-chap-item');
+      items.forEach((item, idx) => {
+        const shouldBeActive = idx === activeIdx;
+        const isActive = item.classList.contains('active');
+        
+        if (shouldBeActive && !isActive) {
+          item.classList.add('active');
+          /* Scroll to newly active chapter */
+          requestAnimationFrame(() => {
+            item.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          });
+        } else if (!shouldBeActive && isActive) {
+          item.classList.remove('active');
+        }
       });
     }
 
