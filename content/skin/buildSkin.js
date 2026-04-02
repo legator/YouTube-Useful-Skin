@@ -91,6 +91,9 @@ export function buildSkin() {
   const btnChapNext = ce('button', 'ytp-skin-btn ytp-skin-btn-skip ytp-skin-btn-chap-next', ICONS.chapNext);
   btnChapNext.title = 'Next chapter';
 
+  /* Transparent overlay that captures clicks on the video area for play/pause */
+  const clickOverlay = ce('div', 'ytp-skin-click-overlay');
+
   const btnTheater = ce('button', 'ytp-skin-btn ytp-skin-btn-square', ICONS.theaterMode);
   btnTheater.title = 'Theater mode';
 
@@ -122,7 +125,7 @@ export function buildSkin() {
   bottomBar.append(controls, chapNameEl, progressWrap);
 
   return {
-    topBar, bottomBar,
+    topBar, bottomBar, clickOverlay,
     titleEl, channelEl, viewsEl,
     btnVol, volPopup, volSliderTrack, volSliderFill, volSliderThumb, volLabel, volWrap,
     badgeCC, ccMenu, ccMenuList,

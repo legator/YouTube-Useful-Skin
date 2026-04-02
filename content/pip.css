@@ -51,7 +51,7 @@ video { width: 100%; flex: 1; object-fit: contain; background: #000; }
 .pip-btn svg { width: 22px; height: 22px; fill: currentColor; }
 
 .pip-btn-play {
-  width: 44px; height: 44px; border: 2px solid #fff; border-radius: 50%;
+  width: 44px; height: 44px; border: none; border-radius: 50%;
   background: rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center;
 }
 .pip-btn-play:hover { background: rgba(255,255,255,0.12); }
@@ -111,14 +111,14 @@ video { width: 100%; flex: 1; object-fit: contain; background: #000; }
 }
 .pip-badge {
   font-size: 11px; font-weight: 700; letter-spacing: 0.3px;
-  border: 1.5px solid rgba(255,255,255,0.6); border-radius: 3px;
+  border: none; border-radius: 3px;
   padding: 1px 4px; line-height: 1; color: #fff; cursor: pointer;
-  user-select: none; transition: border-color 0.15s, background 0.15s;
+  user-select: none; transition: background 0.15s;
   background: none; height: 24px; box-sizing: border-box;
   display: inline-flex; align-items: center; justify-content: center;
 }
-.pip-badge:hover { border-color: #fff; background: rgba(255,255,255,0.12); }
-.pip-badge.active { background: rgba(255,255,255,0.18); border-color: #fff; }
+.pip-badge:hover { background: rgba(255,255,255,0.12); }
+.pip-badge.active { background: rgba(255,255,255,0.18); }
 .pip-badge sup { font-size: 7px; vertical-align: super; margin-left: 1px; }
 
 .pip-btn-chap {

@@ -25,11 +25,13 @@ const HANDLERS = {
 };
 
 /* Get nonce from script tag data attribute for authentication */
-const scriptEl = document.getElementById('ytp-skin-bridge');
+const scriptEl = document.currentScript || document.getElementById('ytp-skin-bridge');
 const BRIDGE_NONCE = scriptEl?.dataset?.nonce || null;
 
 if (!BRIDGE_NONCE) {
   console.error('[YTP-Skin Bridge] No nonce found - bridge will not respond to requests');
+} else {
+  console.log('[YTP-Skin Bridge] Initialized with nonce authentication');
 }
 
 function getPlayer() {
@@ -45,7 +47,8 @@ window.addEventListener('message', (e) => {
   if (e.data.source !== 'ytp-skin-request') return;
   
   /* Validate nonce to prevent unauthorized scripts from using this bridge */
-  if (!BRIDGE_NONCE || e.data.nonce !== BRIDGE_NONCE) {
+  /* Only enforce if nonce was successfully initialized */
+  if (BRIDGE_NONCE && e.data.nonce !== BRIDGE_NONCE) {
     console.warn('[YTP-Skin Bridge] Invalid nonce - rejecting request');
     return;
   }

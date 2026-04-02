@@ -12,13 +12,16 @@
   const bridgeCallbacks = new Map();
   
   /* Generate a unique nonce for secure bridge communication */
-  const bridgeNonce = crypto.randomUUID();
+  const bridgeNonce = (typeof crypto !== 'undefined' && crypto.randomUUID) 
+    ? crypto.randomUUID() 
+    : 'nonce-' + Date.now() + '-' + Math.random().toString(36).substring(2);
 
   let _bridgeReadyResolve;
   const bridgeReady = new Promise(res => { _bridgeReadyResolve = res; });
   
   /* Fallback: resolve after timeout so per-call timeouts can handle failures */
-  setTimeout(() => _bridgeReadyResolve(), TIMING.BRIDGE_READY_TIMEOUT);
+  /* Use hardcoded value since TIMING not imported yet */
+  setTimeout(() => _bridgeReadyResolve(), 5000);
 
   window.addEventListener('message', (e) => {
     /* Security: Validate message origin, structure, and nonce */
@@ -26,13 +29,21 @@
     if (!e.data || typeof e.data !== 'object') return;
     
     if (e.data.source === 'ytp-skin-bridge-ready') {
-      if (e.data.nonce !== bridgeNonce) return; /* Validate nonce */
+      /* Validate nonce if available */
+      if (bridgeNonce && e.data.nonce && e.data.nonce !== bridgeNonce) {
+        console.warn('[YTP-Skin] Bridge nonce mismatch');
+        return;
+      }
       _bridgeReadyResolve(); 
       return; 
     }
     
     if (e.data.source !== 'ytp-skin-response') return;
-    if (e.data.nonce !== bridgeNonce) return; /* Validate nonce */
+    /* Validate nonce if available */
+    if (bridgeNonce && e.data.nonce && e.data.nonce !== bridgeNonce) {
+      console.warn('[YTP-Skin] Response nonce mismatch');
+      return;
+    }
     
     const cb = bridgeCallbacks.get(e.data.id);
     if (cb) { 
@@ -46,14 +57,14 @@
       const id = ++bridgeMsgId;
       bridgeCallbacks.set(id, resolve);
       window.postMessage({ source: 'ytp-skin-request', action, payload, id, nonce: bridgeNonce }, '*');
-      /* Timeout protection */
+      /* Timeout protection - use hardcoded value since TIMING not imported yet */
       setTimeout(() => { 
         if (bridgeCallbacks.has(id)) { 
           bridgeCallbacks.delete(id); 
           console.warn('[YTP-Skin] Bridge call timeout:', action);
           resolve(null); 
         } 
-      }, TIMING.BRIDGE_CALL_TIMEOUT);
+      }, 2000);
     }));
   }
 
@@ -129,6 +140,7 @@
     const ui = buildSkin();
     player.appendChild(ui.topBar);
     player.appendChild(ui.bottomBar);
+    player.appendChild(ui.clickOverlay);
     skinInjected = true;
 
     /* ---- metadata ---- */
@@ -202,6 +214,7 @@
     /* ---- Storyboard thumbnail preview helpers ---- */
     let storyboardData = null;
     const storyboardImageCache = new Map(); /* Cache loaded images for performance */
+    let lastHover = null; /* Last hover position for re-triggering preview after image load */
 
     async function loadStoryboard() {
       if (storyboardData) return; /* Already loaded successfully */
@@ -214,17 +227,25 @@
           /* Verify URL is reachable before committing */
           const testUrl = storyboardUrl(parsed, 0);
           const img = new Image();
-          img.onload = () => { 
+          img.onload = () => {
             storyboardData = parsed;
             storyboardImageCache.set(testUrl, 'loaded');
+            /* Re-trigger preview if user is already hovering over seek bar */
+            if (lastHover) updateSeekPreview(lastHover.pct, lastHover.time);
           };
           img.onerror = () => { 
+            console.warn('[YTP-Skin] Storyboard sheet 0 failed to load — URL may be expired:', testUrl);
             storyboardData = parsed;
             storyboardImageCache.set(testUrl, 'loaded');
+            if (lastHover) updateSeekPreview(lastHover.pct, lastHover.time);
           };
           img.src = testUrl;
           return; /* Done — onload/onerror will finalise */
+        } else {
+          console.warn('[YTP-Skin] parseStoryboardSpec returned null — spec may be malformed:', result.spec.slice(0, 200));
         }
+      } else {
+        console.warn('[YTP-Skin] No spec in result — retry', storyboardRetries + 1);
       }
 
       /* Spec not available yet — schedule a retry (up to 5 attempts) */
@@ -241,8 +262,15 @@
       if (storyboardImageCache.has(url)) return;
       storyboardImageCache.set(url, 'loading');
       const img = new Image();
-      img.onload = () => storyboardImageCache.set(url, 'loaded');
-      img.onerror = () => storyboardImageCache.delete(url);
+      img.onload = () => {
+        storyboardImageCache.set(url, 'loaded');
+        /* Re-trigger preview if user is still hovering over seek bar */
+        if (lastHover) updateSeekPreview(lastHover.pct, lastHover.time);
+      };
+      img.onerror = () => {
+        console.warn('[YTP-Skin] Sheet failed to load:', url);
+        storyboardImageCache.set(url, 'failed'); /* Mark as failed to prevent infinite retries */
+      };
       img.src = url;
     }
 
@@ -263,25 +291,40 @@
       }
       /* Only show preview if image is loaded or loading */
       const cacheStatus = storyboardImageCache.get(frame.url);
-      if (cacheStatus) {
+      if (cacheStatus === 'loaded') {
+        /* Target display size for the preview popup */
+        const TARGET_W = 160;
+        const TARGET_H = 90;
+        const scale = Math.min(TARGET_W / frame.w, TARGET_H / frame.h);
+
         ui.seekPreviewImg.style.backgroundImage = `url("${frame.url}")`;
         ui.seekPreviewImg.style.backgroundPosition = `-${frame.x}px -${frame.y}px`;
         ui.seekPreviewImg.style.backgroundSize = `${frame.cols * frame.w}px ${frame.rows * frame.h}px`;
         ui.seekPreviewImg.style.width = frame.w + 'px';
         ui.seekPreviewImg.style.height = frame.h + 'px';
+        ui.seekPreviewImg.style.transform = `scale(${scale})`;
+        ui.seekPreviewImg.style.transformOrigin = 'top left';
+        ui.seekPreview.style.width = Math.round(frame.w * scale) + 'px';
+        ui.seekPreview.style.height = Math.round(frame.h * scale) + 'px';
+        ui.seekPreview.style.overflow = 'hidden';
         /* Position horizontally, clamped to seek area */
         let left = pct * 100;
         ui.seekPreview.style.left = left + '%';
         ui.seekPreview.classList.add('visible');
+      } else {
+        ui.seekPreview.classList.remove('visible');
       }
     }
 
-    /* Load storyboard early */
-    setTimeout(loadStoryboard, TIMING.STORYBOARD_INITIAL_DELAY);
+    /* Load storyboard early — use a short delay so player response is available */
+    setTimeout(loadStoryboard, 500);
     function onStoryboardLoadedData() {
       /* Reset for new video */
       storyboardData = null;
       storyboardRetries = 0;
+      storyboardImageCache.clear(); /* Clear cached images from previous video */
+      ui.seekPreview.classList.remove('visible'); /* Hide any showing preview */
+      lastHover = null;
       setTimeout(loadStoryboard, TIMING.STORYBOARD_RELOAD_DELAY);
     }
     video.addEventListener('loadeddata', onStoryboardLoadedData);
@@ -293,6 +336,7 @@
       let pct = (e.clientX - rect.left) / rect.width;
       pct = Math.max(0, Math.min(1, pct));
       const hoverTime = pct * (video.duration || 0);
+      lastHover = { pct, time: hoverTime };
       const chapter = getChapterAtTime(hoverTime);
       const timeStr = fmtTime(hoverTime);
       ui.seekTooltip.textContent = chapter ? `${timeStr} • ${chapter.title}` : timeStr;
@@ -303,6 +347,14 @@
     ui.seekArea.addEventListener('mousemove', handleSeekMouseMove);
 
     ui.seekArea.addEventListener('mouseleave', () => {
+      lastHover = null;
+      ui.seekPreview.classList.remove('visible');
+    });
+
+    /* Also hide preview when mouse leaves the entire bottom bar
+       (preview popup extends above the seek area so seekArea mouseleave isn't always triggered) */
+    ui.bottomBar.addEventListener('mouseleave', () => {
+      lastHover = null;
       ui.seekPreview.classList.remove('visible');
     });
 
@@ -323,6 +375,12 @@
     video.addEventListener('play', syncPlayBtn);
     video.addEventListener('pause', syncPlayBtn);
     syncPlayBtn();
+
+    /* Click on video area (overlay) to toggle play/pause */
+    ui.clickOverlay.addEventListener('click', () => {
+      closeAllMenus();
+      if (video.paused) video.play(); else video.pause();
+    });
 
     ui.btnPlay.addEventListener('click', () => {
       if (video.paused) video.play(); else video.pause();
@@ -521,11 +579,6 @@
     function syncSpeedBadge() {
       const rate = video.playbackRate || 1;
       ui.badgeSpeed.textContent = rate === 1 ? '1x' : rate + 'x';
-      if (rate !== 1) {
-        ui.badgeSpeed.classList.add('active');
-      } else {
-        ui.badgeSpeed.classList.remove('active');
-      }
     }
 
     function buildSpeedMenu() {
@@ -557,6 +610,8 @@
       customInput.step = '0.05';
       customInput.value = current;
       customInput.title = 'Enter custom speed (0.1–16)';
+      const initialValue = customInput.value;
+      
       const customApply = ce('button', 'ytp-skin-speed-apply', 'Set');
       const applyCustomSpeed = () => {
         let val = parseFloat(customInput.value);
@@ -566,6 +621,16 @@
         syncSpeedBadge();
         closeAllMenus();
       };
+      
+      /* Highlight input when value is modified */
+      customInput.addEventListener('input', () => {
+        if (customInput.value !== initialValue) {
+          customInput.classList.add('modified');
+        } else {
+          customInput.classList.remove('modified');
+        }
+      });
+      
       customApply.addEventListener('click', (e) => { e.stopPropagation(); applyCustomSpeed(); });
       customInput.addEventListener('keydown', (e) => {
         e.stopPropagation();
@@ -678,6 +743,7 @@
         }
 
         item.addEventListener('click', (e) => {
+          e.preventDefault();
           e.stopPropagation();
           video.currentTime = ch.startTime;
           if (!chapPinned) closeAllMenus();
@@ -685,12 +751,13 @@
         ui.chapMenuList.append(item);
       });
 
-      /* Scroll to active chapter with accessibility support */
+      /* Scroll to active chapter — use scrollTop to avoid scrollIntoView scrolling the page */
       if (activeItem) {
         requestAnimationFrame(() => {
-          const prefersReducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-          const scrollBehavior = prefersReducedMotion ? 'auto' : 'smooth';
-          activeItem.scrollIntoView({ behavior: scrollBehavior, block: 'center' });
+          const menuRect = ui.chapMenu.getBoundingClientRect();
+          const itemRect = activeItem.getBoundingClientRect();
+          const offset = itemRect.top - menuRect.top - (ui.chapMenu.clientHeight - itemRect.height) / 2;
+          ui.chapMenu.scrollTop = Math.max(0, ui.chapMenu.scrollTop + offset);
         });
       }
     }
@@ -754,6 +821,7 @@
     }
 
     ui.btnChapters.addEventListener('click', (e) => {
+      e.preventDefault();
       e.stopPropagation();
       const isOpen = ui.chapMenu.classList.contains('visible');
       closeAllMenus();
@@ -763,6 +831,7 @@
         buildChaptersMenu();
         ui.chapMenu.classList.add('visible');
       }
+      return false;
     });
 
     /* Wire up interaction tracking for chapter menu */

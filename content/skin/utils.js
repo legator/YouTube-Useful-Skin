@@ -9,6 +9,7 @@ export const ce = (tag, cls, html) => {
   const el = document.createElement(tag);
   if (cls) el.className = cls;
   if (html) el.innerHTML = html; /* ONLY for trusted SVG/icon strings */
+  if (tag === 'button') el.type = 'button'; /* Prevent default form submission */
   return el;
 };
 
