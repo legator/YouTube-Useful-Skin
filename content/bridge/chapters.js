@@ -27,7 +27,9 @@ export function getChapters(ytP, payload, reply) {
         }
       }
     }
-  } catch (_) {}
+  } catch (err) {
+    console.warn('[YTP-Skin] Chapter method 1 failed:', err);
+  }
 
   /* Method 2: engagementPanels with chapters */
   if (chapters.length === 0) {
@@ -50,7 +52,9 @@ export function getChapters(ytP, payload, reply) {
           }
         }
       }
-    } catch (_) {}
+    } catch (err) {
+      console.warn('[YTP-Skin] Chapter method 2 failed:', err);
+    }
   }
 
   /* Method 3: Parse description for timestamp lines (0:00 Title / 00:00 Title / 0:00:00 Title) */
@@ -70,7 +74,9 @@ export function getChapters(ytP, payload, reply) {
           chapters.push({ startTime: t, title: m[4].trim() });
         }
       }
-    } catch (_) {}
+    } catch (err) {
+      console.warn('[YTP-Skin] Chapter method 3 failed:', err);
+    }
   }
 
   /* Sort by start time & deduplicate */

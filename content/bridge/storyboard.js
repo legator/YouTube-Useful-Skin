@@ -26,8 +26,8 @@ export function getStoryboard(ytP, payload, reply) {
         const txt = s.textContent;
         if (!txt || txt.length < 100) continue;
         if (txt.includes('playerStoryboardSpecRenderer')) {
-          /* Match "spec":"VALUE" in JSON */
-          const m = txt.match(/"spec"\s*:\s*"(https?:[^"]+)"/);
+          /* Match "spec":"VALUE" in JSON - only accept HTTPS URLs for security */
+          const m = txt.match(/"spec"\s*:\s*"(https:[^"]+)"/); /* Changed https? to https only */
           if (m) {
             spec = m[1].replace(/\\u0026/g, '&').replace(/\\\//g, '/');
             break;

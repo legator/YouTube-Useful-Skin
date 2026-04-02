@@ -31,17 +31,31 @@ function getPlayer() {
 }
 
 window.addEventListener('message', (e) => {
+  /* Security: Validate message origin and structure */
   if (e.source !== window) return;
-  if (!e.data || e.data.source !== 'ytp-skin-request') return;
+  if (!e.data || typeof e.data !== 'object') return;
+  if (e.data.source !== 'ytp-skin-request') return;
 
   const { action, payload, id } = e.data;
+  
+  /* Validate action is a known handler */
+  if (!action || typeof action !== 'string' || !HANDLERS[action]) {
+    console.warn('[YTP-Skin Bridge] Unknown action:', action);
+    return;
+  }
+
   const ytP = getPlayer();
 
   function reply(data) {
     window.postMessage({ source: 'ytp-skin-response', id, data }, '*');
   }
 
-  HANDLERS[action]?.(ytP, payload, reply);
+  try {
+    HANDLERS[action](ytP, payload, reply);
+  } catch (err) {
+    console.error('[YTP-Skin Bridge] Handler error:', action, err);
+    reply({ error: 'Handler failed' });
+  }
 });
 
 /* Signal that the bridge is ready */

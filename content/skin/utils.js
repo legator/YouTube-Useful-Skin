@@ -1,10 +1,23 @@
 export const qs = (sel, root = document) => root.querySelector(sel);
 
+/**
+ * Creates a DOM element. 
+ * WARNING: `html` parameter uses innerHTML - only pass trusted/sanitized content!
+ * For user-generated content, use textContent instead.
+ */
 export const ce = (tag, cls, html) => {
   const el = document.createElement(tag);
   if (cls) el.className = cls;
-  if (html) el.innerHTML = html;
+  if (html) el.innerHTML = html; /* ONLY for trusted SVG/icon strings */
   return el;
+};
+
+/** Sanitizes text content to prevent XSS */
+export const sanitizeText = (text) => {
+  if (!text) return '';
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
 };
 
 export const fmtTime = (s) => {
