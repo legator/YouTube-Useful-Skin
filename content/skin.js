@@ -569,6 +569,7 @@
 
     /* ---- Chapters / Timecodes menu ---- */
     let cachedChapters = [];
+    let lastActiveChapterIdx = -1; /* Track active chapter for efficient updates */
 
     async function loadChapters() {
       const result = await bridgeCall('getChapters', {});
@@ -601,7 +602,6 @@
 
       chapters.forEach((ch, idx) => {
         const item = ce('div', 'ytp-skin-menu-item ytp-skin-chap-item');
-        item.dataset.chapterIndex = idx; // Store index for updates
 
         /* Determine if this chapter is the currently active one */
         const nextStart = idx + 1 < chapters.length ? chapters[idx + 1].startTime : dur;
@@ -616,6 +616,7 @@
         if (isActive) {
           item.classList.add('active');
           activeItem = item;
+          lastActiveChapterIdx = idx;
         }
 
         item.addEventListener('click', (e) => {
@@ -626,50 +627,53 @@
         ui.chapMenuList.append(item);
       });
 
-      /* Scroll to active chapter */
+      /* Scroll to active chapter with accessibility support */
       if (activeItem) {
         requestAnimationFrame(() => {
-          activeItem.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          const prefersReducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+          const scrollBehavior = prefersReducedMotion ? 'auto' : 'smooth';
+          activeItem.scrollIntoView({ behavior: scrollBehavior, block: 'center' });
         });
       }
     }
 
-    /* Update chapter menu highlighting when time changes */
+    /* Update chapter menu highlighting when time changes (optimized) */
     function updateChapterMenuHighlight() {
       if (!ui.chapMenu.classList.contains('visible')) return;
       
-      const dur = video.duration || 0;
-      const currentTime = video.currentTime || 0;
+      const cur = video.currentTime;
       const chapters = cachedChapters;
-
       if (chapters.length === 0) return;
 
-      /* Find current active chapter */
+      /* Find current active chapter index (reverse search for efficiency) */
       let activeIdx = -1;
-      for (let i = 0; i < chapters.length; i++) {
-        const nextStart = i + 1 < chapters.length ? chapters[i + 1].startTime : dur;
-        if (currentTime >= chapters[i].startTime && currentTime < nextStart) {
+      for (let i = chapters.length - 1; i >= 0; i--) {
+        if (cur >= chapters[i].startTime) {
           activeIdx = i;
           break;
         }
       }
 
-      /* Update highlights */
+      /* Only update DOM if the active chapter has changed */
+      if (activeIdx === lastActiveChapterIdx) return;
+
       const items = ui.chapMenuList.querySelectorAll('.ytp-skin-chap-item');
-      items.forEach((item, idx) => {
-        const shouldBeActive = idx === activeIdx;
-        const isActive = item.classList.contains('active');
-        
-        if (shouldBeActive && !isActive) {
-          item.classList.add('active');
-          /* Scroll to newly active chapter */
-          requestAnimationFrame(() => {
-            item.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          });
-        } else if (!shouldBeActive && isActive) {
-          item.classList.remove('active');
-        }
-      });
+      const targetItem = items[activeIdx];
+      const currentActive = items[lastActiveChapterIdx];
+
+      /* Update highlights */
+      if (currentActive) currentActive.classList.remove('active');
+      if (targetItem) {
+        targetItem.classList.add('active');
+        /* Scroll to newly active chapter with accessibility support */
+        requestAnimationFrame(() => {
+          const prefersReducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+          const scrollBehavior = prefersReducedMotion ? 'auto' : 'smooth';
+          targetItem.scrollIntoView({ behavior: scrollBehavior, block: 'center' });
+        });
+      }
+
+      lastActiveChapterIdx = activeIdx;
     }
 
     ui.btnChapters.addEventListener('click', (e) => {
@@ -677,6 +681,7 @@
       const isOpen = ui.chapMenu.classList.contains('visible');
       closeAllMenus();
       if (!isOpen) {
+        lastActiveChapterIdx = -1; /* Reset cache when opening menu */
         buildChaptersMenu();
         ui.chapMenu.classList.add('visible');
       }
@@ -778,6 +783,7 @@
 
     /* Load chapters on init and render markers */
     async function initChapters() {
+      lastActiveChapterIdx = -1; /* Reset cache on new video */
       const chapters = await loadChapters();
       const hasChap = chapters.length > 0;
       if (hasChap) {
