@@ -707,8 +707,9 @@
     /* Update chapter menu highlighting when time changes (optimized) */
     function updateChapterMenuHighlight() {
       if (!ui.chapMenu.classList.contains('visible')) return;
-      
+
       const cur = video.currentTime;
+      if (!Number.isFinite(cur)) return;
       const chapters = cachedChapters;
       if (chapters.length === 0) return;
 
