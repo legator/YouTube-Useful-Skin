@@ -50,18 +50,32 @@ export function setCaptions(ytP, payload, reply) {
   try {
     if (track && track.languageCode) {
       ytP.loadModule('captions');
-      /* Poll until the module accepts the option (up to 10 × 200 ms = 2 s) */
-      (function trySetCaption(attempts) {
+      /* Poll until the module accepts the option (max 10 attempts × 200ms = 2s) */
+      let attempts = 0;
+      const maxAttempts = 10;
+      const retryDelay = 200;
+      
+      (function trySetCaption() {
         try {
           ytP.setOption('captions', 'track', track);
-        } catch (_) {
-          if (attempts < 10) setTimeout(() => trySetCaption(attempts + 1), 200);
+          reply({ ok: true });
+        } catch (err) {
+          attempts++;
+          if (attempts < maxAttempts) {
+            setTimeout(trySetCaption, retryDelay);
+          } else {
+            console.warn('[YTP-Skin] Failed to set captions after retries');
+            reply({ ok: false });
+          }
         }
-      })(0);
+      })();
+      return; /* Reply is sent asynchronously */
     } else {
       try { ytP.setOption('captions', 'track', {}); } catch (_) {}
       try { ytP.unloadModule('captions'); } catch (_) {}
     }
-  } catch (_) {}
+  } catch (err) {
+    console.warn('[YTP-Skin] Caption error:', err);
+  }
   reply({ ok: true });
 }

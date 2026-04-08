@@ -71,6 +71,17 @@
   font-family: 'Segoe UI', Roboto, Arial, sans-serif;
 }
 
+/* Transparent click-capture area covering the video (needed because .ytp-chrome-bottom is hidden) */
+.ytp-skin-click-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 55; /* below top/bottom bars (z-index 60) but above video */
+  cursor: pointer;
+}
+
 /* --- Top Bar --- */
 .ytp-skin-top-bar {
   position: absolute;
@@ -195,7 +206,7 @@
 .ytp-skin-btn-play {
   width: 52px;
   height: 52px;
-  border: 2.5px solid #fff;
+  border: none;
   border-radius: 50%;
   margin: 0 8px;
   display: flex;
@@ -224,7 +235,7 @@
 .ytp-skin-btn-square {
   width: 28px;
   height: 28px;
-  border: 2px solid rgba(255,255,255,0.7);
+  border: none;
   border-radius: 3px;
   display: flex;
   align-items: center;
@@ -235,7 +246,6 @@
 }
 
 .ytp-skin-btn-square:hover {
-  border-color: #fff;
   background: rgba(255,255,255,0.1);
 }
 
@@ -273,13 +283,11 @@
 
 /* PiP active state */
 .ytp-skin-btn-square.ytp-skin-pip-active {
-  border-color: #e53935;
   background: rgba(229, 57, 53, 0.2);
 }
 
 .ytp-skin-btn-square.ytp-skin-pip-active:hover {
   background: rgba(229, 57, 53, 0.35);
-  border-color: #f44336;
 }
 
 /* ===== LIVE BUTTON ===== */
@@ -316,30 +324,29 @@
   font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.4px;
-  border: 2px solid rgba(255,255,255,0.7);
+  border: none;
   border-radius: 3px;
   padding: 2px 5px;
   line-height: 1;
   color: #fff;
   cursor: pointer;
   user-select: none;
-  transition: border-color 0.15s, background 0.15s;
+  transition: background 0.15s;
   pointer-events: auto;
   box-sizing: border-box;
   height: 28px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  background: transparent;
 }
 
 .ytp-skin-badge:hover {
-  border-color: #fff;
   background: rgba(255,255,255,0.12);
 }
 
 .ytp-skin-badge.active {
   background: rgba(255,255,255,0.18);
-  border-color: #fff;
 }
 
 .ytp-skin-badge-hd sup {
@@ -692,7 +699,7 @@
   border-radius: 4px;
   overflow: hidden;
   box-shadow: 0 2px 10px rgba(0,0,0,0.7);
-  border: 2px solid rgba(255,255,255,0.25);
+  border: none;
 }
 
 .ytp-skin-seek-preview.visible {
@@ -716,7 +723,7 @@
 
 .ytp-skin-speed-input {
   width: 56px;
-  background: rgba(255,255,255,0.1);
+  background: transparent;
   border: 1px solid rgba(255,255,255,0.3);
   border-radius: 3px;
   color: #fff;
@@ -729,7 +736,10 @@
 
 .ytp-skin-speed-input:focus {
   border-color: #e53935;
-  background: rgba(255,255,255,0.15);
+}
+
+.ytp-skin-speed-input.modified {
+  background: rgba(255,255,255,0.1);
 }
 
 /* Hide spin buttons */
@@ -812,7 +822,7 @@
 .ytp-skin-btn-chapters {
   width: 28px;
   height: 28px;
-  border: 2px solid rgba(255,255,255,0.7);
+  border: none;
   border-radius: 3px;
   display: flex;
   align-items: center;
@@ -823,7 +833,6 @@
 }
 
 .ytp-skin-btn-chapters:hover {
-  border-color: #fff;
   background: rgba(255,255,255,0.1);
 }
 

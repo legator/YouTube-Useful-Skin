@@ -1,16 +1,28 @@
 export function getQualities(ytP, payload, reply) {
-  if (!ytP) { reply({ levels: [], current: '' }); return; }
+  if (!ytP) { reply({ levels: [], current: '', qualityData: [] }); return; }
   let levels = [];
   let current = '';
-  try { levels = ytP.getAvailableQualityLevels() || []; } catch (_) {}
-  try { current = ytP.getPlaybackQuality() || ''; } catch (_) {}
-
   let qualityData = [];
+  
+  try { 
+    levels = ytP.getAvailableQualityLevels() || []; 
+  } catch (err) {
+    console.warn('[YTP-Skin] Failed to get quality levels:', err);
+  }
+  
+  try { 
+    current = ytP.getPlaybackQuality() || ''; 
+  } catch (err) {
+    console.warn('[YTP-Skin] Failed to get current quality:', err);
+  }
+
   try {
     if (typeof ytP.getAvailableQualityData === 'function') {
       qualityData = ytP.getAvailableQualityData() || [];
     }
-  } catch (_) {}
+  } catch (err) {
+    console.warn('[YTP-Skin] Failed to get quality data:', err);
+  }
 
   reply({ levels, current, qualityData });
 }
@@ -18,11 +30,23 @@ export function getQualities(ytP, payload, reply) {
 export function setQuality(ytP, payload, reply) {
   if (!ytP) { reply({ ok: false }); return; }
   const q = payload.quality;
+  if (!q) { reply({ ok: false }); return; }
+  
   try {
     if (typeof ytP.setPlaybackQualityRange === 'function') {
       ytP.setPlaybackQualityRange(q, q);
     }
-  } catch (_) {}
-  try { ytP.setPlaybackQuality(q); } catch (_) {}
+  } catch (err) {
+    console.warn('[YTP-Skin] setPlaybackQualityRange failed:', err);
+  }
+  
+  try { 
+    ytP.setPlaybackQuality(q); 
+  } catch (err) {
+    console.warn('[YTP-Skin] setPlaybackQuality failed:', err);
+    reply({ ok: false });
+    return;
+  }
+  
   reply({ ok: true });
 }

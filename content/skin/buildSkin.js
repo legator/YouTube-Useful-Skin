@@ -128,7 +128,7 @@ export function buildSkin() {
   bottomBar.append(controls, chapNameEl, progressWrap);
 
   return {
-    topBar, bottomBar,
+    topBar, bottomBar, clickOverlay,
     titleEl, channelEl, viewsEl,
     btnVol, volPopup, volSliderTrack, volSliderFill, volSliderThumb, volLabel, volWrap,
     badgeCC, ccMenu, ccMenuList,

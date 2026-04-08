@@ -5,17 +5,22 @@ function extractSpec(pr) {
 
 export function getStoryboard(ytP, payload, reply) {
   let spec = null;
+  let method = null;
 
   /* Method 1: YouTube player API — getPlayerResponse() */
   try {
     if (ytP && typeof ytP.getPlayerResponse === 'function') {
       spec = extractSpec(ytP.getPlayerResponse());
+      if (spec) method = 'playerAPI';
     }
-  } catch (_) {}
+  } catch (e) { console.warn('[YTP-Skin] storyboard method1 error:', e); }
 
   /* Method 2: ytInitialPlayerResponse global */
   if (!spec) {
-    try { spec = extractSpec(window.ytInitialPlayerResponse); } catch (_) {}
+    try {
+      spec = extractSpec(window.ytInitialPlayerResponse);
+      if (spec) method = 'ytInitialPlayerResponse';
+    } catch (e) { console.warn('[YTP-Skin] storyboard method2 error:', e); }
   }
 
   /* Method 3: scan <script> tags for embedded storyboard spec */
@@ -26,15 +31,15 @@ export function getStoryboard(ytP, payload, reply) {
         const txt = s.textContent;
         if (!txt || txt.length < 100) continue;
         if (txt.includes('playerStoryboardSpecRenderer')) {
-          /* Match "spec":"VALUE" in JSON */
-          const m = txt.match(/"spec"\s*:\s*"(https?:[^"]+)"/);
+          const m = txt.match(/"spec"\s*:\s*"(https:[^"]+)"/);
           if (m) {
             spec = m[1].replace(/\\u0026/g, '&').replace(/\\\//g, '/');
+            method = 'scriptTag';
             break;
           }
         }
       }
-    } catch (_) {}
+    } catch (e) { console.warn('[YTP-Skin] storyboard method3 error:', e); }
   }
 
   /* Method 4: ytcfg PLAYER_VARS */
@@ -43,6 +48,10 @@ export function getStoryboard(ytP, payload, reply) {
       const cfg = window.ytcfg?.get?.('PLAYER_VARS');
       if (cfg?.storyboard_spec) { spec = cfg.storyboard_spec; method = 'ytcfg'; }
     } catch (e) { console.warn('[YTP-Skin] storyboard method4 error:', e); }
+  }
+
+  if (!spec) {
+    console.warn('[YTP-Skin] storyboard spec NOT found (all 4 methods failed)');
   }
 
   reply({ spec });
