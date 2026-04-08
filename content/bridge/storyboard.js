@@ -41,8 +41,8 @@ export function getStoryboard(ytP, payload, reply) {
   if (!spec) {
     try {
       const cfg = window.ytcfg?.get?.('PLAYER_VARS');
-      if (cfg?.storyboard_spec) spec = cfg.storyboard_spec;
-    } catch (_) {}
+      if (cfg?.storyboard_spec) { spec = cfg.storyboard_spec; method = 'ytcfg'; }
+    } catch (e) { console.warn('[YTP-Skin] storyboard method4 error:', e); }
   }
 
   reply({ spec });

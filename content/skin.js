@@ -119,11 +119,64 @@
       } catch (_) { /* ignore */ }
     }
     updateMeta();
-    const metaInterval = setInterval(updateMeta, 2000);
+    const metaInterval = setInterval(updateMeta, TIMING.METADATA_UPDATE_INTERVAL);
+
+    /* ---- Live stream helpers ---- */
+    function isLive() {
+      /* Primary: HLS live streams have duration === Infinity */
+      if (video.duration === Infinity) return true;
+      /* Fallback: YouTube adds .ytp-live class to the player for live streams */
+      if (player.classList.contains('ytp-live')) return true;
+      /* Fallback: YouTube renders a live badge element when live */
+      if (player.querySelector('.ytp-live-badge, .ytp-live')) return true;
+      return false;
+    }
+
+    function updateLiveControls() {
+      const live = isLive();
+      ui.btnSkipBack.style.display = live ? 'none' : '';
+      ui.btnSkipFwd.style.display = live ? 'none' : '';
+      ui.btnChapPrev.style.display = live ? 'none' : '';
+      ui.btnChapNext.style.display = live ? 'none' : '';
+      ui.btnChapters.style.display = live ? 'none' : '';
+      ui.btnLive.style.display = live ? 'flex' : 'none';
+    }
+    video.addEventListener('durationchange', updateLiveControls);
+    video.addEventListener('loadedmetadata', updateLiveControls);
+    /* Also re-check periodically for a short window after init in case metadata arrives late */
+    let liveCheckCount = 0;
+    const liveCheckInterval = setInterval(() => {
+      updateLiveControls();
+      if (++liveCheckCount >= 5) clearInterval(liveCheckInterval);
+    }, 1000);
+    updateLiveControls();
 
     /* ---- time & progress updates ---- */
     function updateProgress() {
       if (seeking) return;
+
+      /* Live stream handling */
+      if (isLive()) {
+        const seekable = video.seekable;
+        const liveEdge = seekable.length ? seekable.end(seekable.length - 1) : video.currentTime;
+        const start = seekable.length ? seekable.start(0) : 0;
+        const range = liveEdge - start;
+        const cur = video.currentTime || 0;
+        const behind = Math.max(0, liveEdge - cur);
+
+        const pct = range > 0 ? Math.max(0, Math.min(100, ((cur - start) / range) * 100)) : 100;
+        ui.seekFill.style.width = pct + '%';
+        ui.seekThumb.style.left = pct + '%';
+        ui.seekBuffer.style.width = '100%';
+        ui.timeLeft.textContent = behind > 2 ? '\u2212' + fmtTime(Math.round(behind)) : 'LIVE';
+        ui.timeRight.textContent = '';
+        ui.chapNameEl.textContent = '';
+
+        const atLive = behind <= 5;
+        ui.btnLive.classList.toggle('at-live', atLive);
+        return;
+      }
+
       const dur = video.duration || 0;
       const cur = video.currentTime || 0;
       ui.timeLeft.textContent = fmtTime(cur);
@@ -165,6 +218,7 @@
 
     async function loadStoryboard() {
       if (storyboardData) return; /* Already loaded successfully */
+      if (isLive()) return; /* Live streams have no storyboard */
 
       const result = await bridgeCall('getStoryboard', {});
 
@@ -178,9 +232,10 @@
             storyboardData = parsed;
             storyboardImageCache.set(testUrl, 'loaded');
           };
-          img.onerror = () => { 
-            storyboardData = parsed;
-            storyboardImageCache.set(testUrl, 'loaded');
+          img.onerror = () => {
+            /* URL expired or unavailable — discard this spec and retry */
+            storyboardRetries++;
+            if (storyboardRetries < 5) setTimeout(loadStoryboard, TIMING.STORYBOARD_RETRY_DELAY);
           };
           img.src = testUrl;
           return; /* Done — onload/onerror will finalise */
@@ -290,45 +345,29 @@
 
     /* ---- volume / mute ---- */
 
-    /* Clean up legacy global volume/muted keys (migration from old implementation) */
-    chrome.storage.local.remove(['volume', 'muted']);
-
-    /* Restore saved volume for this video */
-    const vid = getVideoId();
-    if (vid) {
-      chrome.storage.local.get([`volume_${vid}`, `muted_${vid}`], (r) => {
-        const savedVol = r[`volume_${vid}`];
-        const savedMuted = r[`muted_${vid}`];
-        if (typeof savedVol === 'number') video.volume = savedVol;
-        if (typeof savedMuted === 'boolean') video.muted = savedMuted;
-      });
-    }
-
-    let volSaveTimer;
     function syncVolBtn() {
       ui.btnVol.innerHTML = volIcon(video.volume, video.muted);
       const pct = video.muted ? 0 : Math.round(video.volume * 100);
       ui.volSliderFill.style.height = pct + '%';
       ui.volSliderThumb.style.bottom = pct + '%';
       ui.volLabel.textContent = pct + '%';
-      /* Debounced save for this video */
-      clearTimeout(volSaveTimer);
-      volSaveTimer = setTimeout(() => {
-        const currentVid = getVideoId();
-        if (currentVid) {
-          chrome.storage.local.set({
-            [`volume_${currentVid}`]: video.volume,
-            [`muted_${currentVid}`]: video.muted
-          });
-        }
-      }, 500);
     }
     video.addEventListener('volumechange', syncVolBtn);
     syncVolBtn();
 
+    /* Sync final volume value to YouTube's player API so it persists via yt-player-volume */
+    let ytVolSyncTimer;
+    function scheduleVolumeSync() {
+      clearTimeout(ytVolSyncTimer);
+      ytVolSyncTimer = setTimeout(() => {
+        bridgeCall('setVolume', { volume: video.volume, muted: video.muted });
+      }, 300);
+    }
+
     ui.btnVol.addEventListener('click', (e) => {
       e.stopPropagation();
       video.muted = !video.muted;
+      scheduleVolumeSync();
     });
 
     /* volume slider interaction (vertical) */
@@ -355,6 +394,7 @@
       };
       const onUp = () => {
         volDragging = false;
+        scheduleVolumeSync();
         if (!ui.volWrap.matches(':hover')) ui.volPopup.classList.remove('visible');
         document.removeEventListener('mousemove', onMove);
         document.removeEventListener('mouseup', onUp);
@@ -377,6 +417,7 @@
       vol = Math.max(0, Math.min(1, vol));
       video.volume = vol;
       if (vol > 0) video.muted = false;
+      scheduleVolumeSync();
     }, { passive: false });
 
     /* ---- CC / Subtitles menu ---- */
@@ -813,6 +854,12 @@
       if (next) video.currentTime = next.startTime;
     });
 
+    /* ---- Return to Live ---- */
+    ui.btnLive.addEventListener('click', () => {
+      const seekable = video.seekable;
+      if (seekable.length) video.currentTime = seekable.end(seekable.length - 1);
+    });
+
     /* ---- Picture-in-Picture ---- */
     let pipWindow = null;
     let pipCleanup = null;
@@ -929,11 +976,14 @@
     cleanupSkin = function () {
       skinInjected = false;
       clearInterval(metaInterval);
+      clearInterval(liveCheckInterval);
       clearTimeout(hideTimeout);
       cleanupMediaSession?.();
       video.removeEventListener('timeupdate', updateProgress);
       video.removeEventListener('loadedmetadata', updateProgress);
       video.removeEventListener('durationchange', updateProgress);
+      video.removeEventListener('durationchange', updateLiveControls);
+      video.removeEventListener('loadedmetadata', updateLiveControls);
       video.removeEventListener('loadeddata', onStoryboardLoadedData);
       video.removeEventListener('play', syncPlayBtn);
       video.removeEventListener('pause', syncPlayBtn);
