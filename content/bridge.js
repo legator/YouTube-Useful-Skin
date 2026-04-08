@@ -5,12 +5,13 @@
    in its own file under content/bridge/.
    ============================================================ */
 
-import { getQualities, setQuality }           from './bridge/quality.js';
-import { getCaptions, setCaptions }           from './bridge/captions.js';
-import { getSyncState }                       from './bridge/syncState.js';
-import { getStoryboard }                      from './bridge/storyboard.js';
-import { getChapters }                        from './bridge/chapters.js';
-import { toggleFullscreen, syncFullscreenState } from './bridge/fullscreen.js';
+import { getQualities, setQuality }               from './bridge/quality.js';
+import { getCaptions, setCaptions }               from './bridge/captions.js';
+import { getSyncState }                           from './bridge/syncState.js';
+import { getStoryboard }                          from './bridge/storyboard.js';
+import { getChapters }                            from './bridge/chapters.js';
+import { toggleFullscreen, syncFullscreenState }  from './bridge/fullscreen.js';
+import { setVolume }                              from './bridge/volume.js';
 
 const HANDLERS = {
   getQualities,
@@ -22,6 +23,7 @@ const HANDLERS = {
   getChapters,
   toggleFullscreen,
   syncFullscreenState,
+  setVolume,
 };
 
 /* Get nonce from script tag data attribute for authentication */

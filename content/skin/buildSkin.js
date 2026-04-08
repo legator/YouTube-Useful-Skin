@@ -91,6 +91,9 @@ export function buildSkin() {
   const btnChapNext = ce('button', 'ytp-skin-btn ytp-skin-btn-skip ytp-skin-btn-chap-next', ICONS.chapNext);
   btnChapNext.title = 'Next chapter';
 
+  const btnLive = ce('button', 'ytp-skin-btn-live', '\u25CF LIVE');
+  btnLive.title = 'Return to live';
+
   /* Transparent overlay that captures clicks on the video area for play/pause */
   const clickOverlay = ce('div', 'ytp-skin-click-overlay');
 
@@ -103,7 +106,7 @@ export function buildSkin() {
   const btnFS = ce('button', 'ytp-skin-btn ytp-skin-btn-square', ICONS.fullscreen);
   btnFS.title = 'Full screen';
 
-  controls.append(volWrap, ccWrap, hdWrap, speedWrap, chapWrap, btnChapPrev, btnSkipBack, btnPlay, btnSkipFwd, btnChapNext, btnTheater, btnMini, btnFS);
+  controls.append(volWrap, ccWrap, hdWrap, speedWrap, chapWrap, btnChapPrev, btnSkipBack, btnPlay, btnSkipFwd, btnChapNext, btnLive, btnTheater, btnMini, btnFS);
 
   /* seek / progress row */
   const progressWrap = ce('div', 'ytp-skin-progress-wrap');
@@ -134,6 +137,7 @@ export function buildSkin() {
     btnChapters, chapMenu, chapMenuList, chapMenuHeader, btnChapPin, chapWrap,
     btnChapPrev, btnChapNext, chapNameEl,
     btnSkipBack, btnPlay, btnSkipFwd,
+    btnLive,
     btnTheater, btnMini, btnFS,
     timeLeft, timeRight,
     seekArea, seekTrack, seekBuffer, seekFill, seekThumb, seekTooltip,
