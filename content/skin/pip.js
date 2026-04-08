@@ -20,7 +20,7 @@ import { attachSeekDrag, renderCCItems, renderQualityItems } from './buildSkin.j
  * @returns {{ pipWindow: Window, closePip: Function }}
  */
 export async function openDocumentPip({ video, ui, bridgeCall, cachedChapters, loadChapters,
-                                        syncPlayBtn, syncVolBtn, updateProgress, onPipClosed }) {
+                                        syncPlayBtn, syncVolBtn, updateProgress, isLiveStream, onPipClosed }) {
   const pipWin = await window.documentPictureInPicture.requestWindow({
     width: Math.min(640, Math.round(screen.width * 0.35)),
     height: Math.min(360, Math.round(screen.height * 0.35)),
@@ -95,6 +95,18 @@ export async function openDocumentPip({ video, ui, bridgeCall, cachedChapters, l
     video.paused ? ICONS.play : ICONS.pause, video.paused ? 'Play' : 'Pause');
   const pipBtnNext = mkBtn('', ICONS.forward10, 'Forward 10s');
 
+  /* Live button (shown only on live streams) */
+  const pipBtnLive = pipWin.document.createElement('button');
+  pipBtnLive.className = 'pip-btn-live' + (isLiveStream ? ' at-live' : '');
+  pipBtnLive.textContent = 'LIVE';
+  pipBtnLive.title = 'Go to live';
+  pipBtnLive.style.display = isLiveStream ? 'inline-flex' : 'none';
+
+  if (isLiveStream) {
+    pipBtnPrev.style.display = 'none';
+    pipBtnNext.style.display = 'none';
+  }
+
   /* CC badge + menu */
   const pipCCWrap = pipWin.document.createElement('div');
   pipCCWrap.className = 'pip-menu-wrap';
@@ -139,7 +151,7 @@ export async function openDocumentPip({ video, ui, bridgeCall, cachedChapters, l
   pipChapMenu.className = 'pip-menu';
   pipChapWrap.append(pipChapBtn, pipChapMenu);
 
-  ctrlRow.append(pipVolWrap, pipCCWrap, pipHDWrap, pipSpeedWrap, pipBtnPrev, pipBtnPlay, pipBtnNext, pipChapWrap);
+  ctrlRow.append(pipVolWrap, pipCCWrap, pipHDWrap, pipSpeedWrap, pipBtnPrev, pipBtnPlay, pipBtnNext, pipBtnLive, pipChapWrap);
 
   /* Progress / seek row */
   const progRow = pipWin.document.createElement('div');
@@ -205,6 +217,12 @@ export async function openDocumentPip({ video, ui, bridgeCall, cachedChapters, l
   pipBtnPrev.addEventListener('click', () => { video.currentTime = Math.max(0, video.currentTime - SKIP_SECONDS); });
   pipBtnNext.addEventListener('click', () => { video.currentTime = Math.min(video.duration || 0, video.currentTime + SKIP_SECONDS); });
 
+  /* Live button — seek to live edge */
+  pipBtnLive.addEventListener('click', () => {
+    const seekable = video.seekable;
+    if (seekable.length) video.currentTime = seekable.end(seekable.length - 1);
+  });
+
   /* Volume */
   pipBtnVol.addEventListener('click', () => { video.muted = !video.muted; });
   const syncPipVol = () => {
@@ -240,10 +258,46 @@ export async function openDocumentPip({ video, ui, bridgeCall, cachedChapters, l
 
   /* Seek progress sync */
   let pipSeeking = false;
+  let pipLastLiveHeadAtLive = true; /* default: at live until bridge says otherwise */
+  let pipLiveHeadPollTimer = null;
+  function schedulePipLiveHeadPoll() {
+    if (pipLiveHeadPollTimer) return;
+    pipLiveHeadPollTimer = setTimeout(async () => {
+      pipLiveHeadPollTimer = null;
+      if (!isLiveStream) return;
+      const result = await bridgeCall('getSyncState', {});
+      if (result && result.isAtLiveHead !== null && result.isAtLiveHead !== undefined) {
+        pipLastLiveHeadAtLive = result.isAtLiveHead;
+      }
+    }, 2000);
+  }
+
   const syncPipProgress = () => {
     if (pipSeeking) return;
-    const dur = video.duration || 0;
     const cur = video.currentTime || 0;
+
+    if (isLiveStream) {
+      const seekable = video.seekable;
+      let liveEdge = cur;
+      let start = 0;
+      if (seekable.length > 0) {
+        liveEdge = seekable.end(seekable.length - 1);
+        start = seekable.start(0);
+      }
+      const range = liveEdge - start;
+      const pct = range > 0 ? Math.max(0, Math.min(100, ((cur - start) / range) * 100)) : 100;
+      pFill.style.width = pct + '%';
+      pThumb.style.left = pct + '%';
+      pBuf.style.width = '100%';
+      const behind = Math.max(0, liveEdge - cur);
+      pTimeL.textContent = behind > 2 ? '\u2212' + fmtTime(Math.round(behind)) : 'LIVE';
+      pTimeR.textContent = '';
+      pipBtnLive.classList.toggle('at-live', pipLastLiveHeadAtLive);
+      schedulePipLiveHeadPoll();
+      return;
+    }
+
+    const dur = video.duration || 0;
     const pct = dur ? (cur / dur) * 100 : 0;
     pFill.style.width = pct + '%';
     pThumb.style.left = pct + '%';
