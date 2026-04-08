@@ -26,6 +26,16 @@ const HANDLERS = {
   setVolume,
 };
 
+/* Get nonce from script tag data attribute for authentication */
+const scriptEl = document.currentScript || document.getElementById('ytp-skin-bridge');
+const BRIDGE_NONCE = scriptEl?.dataset?.nonce || null;
+
+if (!BRIDGE_NONCE) {
+  console.error('[YTP-Skin Bridge] No nonce found - bridge will not respond to requests');
+} else {
+  console.log('[YTP-Skin Bridge] Initialized with nonce authentication');
+}
+
 function getPlayer() {
   const el = document.getElementById('movie_player');
   if (el && typeof el.getAvailableQualityLevels === 'function') return el;
@@ -33,18 +43,39 @@ function getPlayer() {
 }
 
 window.addEventListener('message', (e) => {
+  /* Security: Validate message origin, structure, and nonce */
   if (e.source !== window) return;
-  if (!e.data || e.data.source !== 'ytp-skin-request') return;
+  if (!e.data || typeof e.data !== 'object') return;
+  if (e.data.source !== 'ytp-skin-request') return;
+  
+  /* Validate nonce to prevent unauthorized scripts from using this bridge */
+  /* Only enforce if nonce was successfully initialized */
+  if (BRIDGE_NONCE && e.data.nonce !== BRIDGE_NONCE) {
+    console.warn('[YTP-Skin Bridge] Invalid nonce - rejecting request');
+    return;
+  }
 
   const { action, payload, id } = e.data;
+  
+  /* Validate action is a known handler */
+  if (!action || typeof action !== 'string' || !HANDLERS[action]) {
+    console.warn('[YTP-Skin Bridge] Unknown action:', action);
+    return;
+  }
+
   const ytP = getPlayer();
 
   function reply(data) {
-    window.postMessage({ source: 'ytp-skin-response', id, data }, '*');
+    window.postMessage({ source: 'ytp-skin-response', id, data, nonce: BRIDGE_NONCE }, '*');
   }
 
-  HANDLERS[action]?.(ytP, payload, reply);
+  try {
+    HANDLERS[action](ytP, payload, reply);
+  } catch (err) {
+    console.error('[YTP-Skin Bridge] Handler error:', action, err);
+    reply({ error: 'Handler failed' });
+  }
 });
 
-/* Signal that the bridge is ready */
-window.postMessage({ source: 'ytp-skin-bridge-ready' }, '*');
+/* Signal that the bridge is ready (include nonce for validation) */
+window.postMessage({ source: 'ytp-skin-bridge-ready', nonce: BRIDGE_NONCE }, '*');

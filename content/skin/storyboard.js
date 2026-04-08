@@ -9,6 +9,7 @@ export function parseStoryboardSpec(spec) {
   if (parts.length < 2) return null;
   const baseUrl = parts[0].replace(/&amp;/g, '&').replace(/\\u0026/g, '&');
 
+
   const levels = [];
   for (let i = 1; i < parts.length; i++) {
     const f = parts[i].split('#');
@@ -18,8 +19,15 @@ export function parseStoryboardSpec(spec) {
     const count = parseInt(f[2]);
     const sheets = parseInt(f[3]) || 1;
     const interval = parseInt(f[4]);
-    const namePattern = f[5];
-    const sigh = f.slice(6).join('#');
+    /* YouTube spec sometimes has an extra field at f[5] before the namePattern.
+       The namePattern always contains '$' (e.g. M$M, $N, etc.).
+       Find it by scanning from index 5 onwards — the first field with '$' is the namePattern. */
+    let namePatternIdx = 5;
+    for (let j = 5; j < Math.min(f.length - 1, 8); j++) {
+      if (f[j].includes('$')) { namePatternIdx = j; break; }
+    }
+    const namePattern = f[namePatternIdx];
+    const sigh = f.slice(namePatternIdx + 1).join('#');
     let cols, rows;
     if (count === 25)       { cols = 5;  rows = 5; }
     else if (count === 100) { cols = 10; rows = 10; }
