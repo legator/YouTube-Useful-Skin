@@ -221,7 +221,9 @@
         ui.timeRight.textContent = '';
         ui.chapNameEl.textContent = '';
 
-        const atLive = behind <= 5;
+        /* At-live threshold: 30 s covers natural HLS/DASH buffering latency.
+           Button turns grey only when the user has deliberately seeked back further. */
+        const atLive = behind <= 30;
         ui.btnLive.classList.toggle('at-live', atLive);
         return;
       }
