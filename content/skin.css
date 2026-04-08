@@ -288,7 +288,7 @@
   align-items: center;
   border: none;
   border-radius: 3px;
-  background: #e53935;
+  background: rgba(255,255,255,0.25); /* grey when behind live edge */
   color: #fff;
   font-size: 11px;
   font-weight: 700;
@@ -302,12 +302,12 @@
 }
 
 .ytp-skin-btn-live:hover:not(.at-live) {
-  background: #c62828;
+  background: rgba(255,255,255,0.38);
 }
 
-/* "at-live" = already at live edge — dim it */
+/* "at-live" = at live edge — highlight red */
 .ytp-skin-btn-live.at-live {
-  background: rgba(255,255,255,0.15);
+  background: #e53935;
   cursor: default;
 }
 
