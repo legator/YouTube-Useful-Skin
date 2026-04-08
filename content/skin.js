@@ -82,6 +82,21 @@
 
   /* Load sub-modules in parallel */
   const _base = chrome.runtime.getURL('content/skin/');
+  let _imports;
+  try {
+    _imports = await Promise.all([
+      import(_base + 'icons.js'),
+      import(_base + 'utils.js'),
+      import(_base + 'constants.js'),
+      import(_base + 'buildSkin.js'),
+      import(_base + 'storyboard.js'),
+      import(_base + 'pip.js'),
+      import(_base + 'mediaSession.js'),
+    ]);
+  } catch (err) {
+    console.error('[YTP-Skin] Failed to load sub-modules — try reloading the extension:', err);
+    return;
+  }
   const [
     { ICONS, volIcon },
     { qs, ce, fmtTime },
@@ -90,15 +105,7 @@
     { parseStoryboardSpec, storyboardUrl, storyboardFrame },
     { openDocumentPip, openBasicPip },
     { setupMediaSession },
-  ] = await Promise.all([
-    import(_base + 'icons.js'),
-    import(_base + 'utils.js'),
-    import(_base + 'constants.js'),
-    import(_base + 'buildSkin.js'),
-    import(_base + 'storyboard.js'),
-    import(_base + 'pip.js'),
-    import(_base + 'mediaSession.js'),
-  ]);
+  ] = _imports;
 
   /* Throttle utility for performance-critical event handlers */
   function throttle(fn, delay) {
@@ -171,6 +178,9 @@
     const metaInterval = setInterval(updateMeta, TIMING.METADATA_UPDATE_INTERVAL);
 
     /* ---- Live stream helpers ---- */
+    /* Once confirmed live, stays true for the lifetime of this skin instance */
+    let isLiveStream = false;
+
     function isLive() {
       /* Primary: HLS live streams have duration === Infinity */
       if (video.duration === Infinity) return true;
@@ -183,12 +193,15 @@
 
     function updateLiveControls() {
       const live = isLive();
-      ui.btnSkipBack.style.display = live ? 'none' : '';
-      ui.btnSkipFwd.style.display = live ? 'none' : '';
-      ui.btnChapPrev.style.display = live ? 'none' : '';
-      ui.btnChapNext.style.display = live ? 'none' : '';
-      ui.btnChapters.style.display = live ? 'none' : '';
-      ui.btnLive.style.display = live ? 'flex' : 'none';
+      if (live) isLiveStream = true; /* latch — never un-set once confirmed */
+      ui.btnSkipBack.style.display = isLiveStream ? 'none' : '';
+      ui.btnSkipFwd.style.display = isLiveStream ? 'none' : '';
+      ui.btnChapPrev.style.display = isLiveStream ? 'none' : '';
+      ui.btnChapNext.style.display = isLiveStream ? 'none' : '';
+      ui.btnChapters.style.display = isLiveStream ? 'none' : '';
+      ui.btnLive.style.display = isLiveStream ? 'flex' : 'none';
+      /* Initialise button as red (at-live) when we first confirm it's a live stream */
+      if (isLiveStream) ui.btnLive.classList.add('at-live');
     }
     video.addEventListener('durationchange', updateLiveControls);
     video.addEventListener('loadedmetadata', updateLiveControls);
@@ -201,30 +214,50 @@
     updateLiveControls();
 
     /* ---- time & progress updates ---- */
+    /* Throttled bridge poll for live-head status (every 2 s is enough) */
+    let lastLiveHeadAtLive = true; /* default: assume at live until told otherwise */
+    let liveHeadPollTimer = null;
+    function scheduleLiveHeadPoll() {
+      if (liveHeadPollTimer) return;
+      liveHeadPollTimer = setTimeout(async () => {
+        liveHeadPollTimer = null;
+        if (!isLiveStream) return;
+        const result = await bridgeCall('getSyncState', {});
+        if (result && result.isAtLiveHead !== null && result.isAtLiveHead !== undefined) {
+          lastLiveHeadAtLive = result.isAtLiveHead;
+        }
+      }, 2000);
+    }
+
     function updateProgress() {
       if (seeking) return;
 
-      /* Live stream handling */
-      if (isLive()) {
+      /* Live stream handling — use cached flag, not isLive() re-check */
+      if (isLiveStream) {
         const seekable = video.seekable;
-        const liveEdge = seekable.length ? seekable.end(seekable.length - 1) : video.currentTime;
-        const start = seekable.length ? seekable.start(0) : 0;
-        const range = liveEdge - start;
         const cur = video.currentTime || 0;
-        const behind = Math.max(0, liveEdge - cur);
 
+        /* Seek bar position */
+        let liveEdge = cur;
+        let start = 0;
+        if (seekable.length > 0) {
+          liveEdge = seekable.end(seekable.length - 1);
+          start = seekable.start(0);
+        }
+        const range = liveEdge - start;
         const pct = range > 0 ? Math.max(0, Math.min(100, ((cur - start) / range) * 100)) : 100;
         ui.seekFill.style.width = pct + '%';
         ui.seekThumb.style.left = pct + '%';
         ui.seekBuffer.style.width = '100%';
+        const behind = Math.max(0, liveEdge - cur);
         ui.timeLeft.textContent = behind > 2 ? '\u2212' + fmtTime(Math.round(behind)) : 'LIVE';
         ui.timeRight.textContent = '';
         ui.chapNameEl.textContent = '';
 
-        /* At-live threshold: 30 s covers natural HLS/DASH buffering latency.
-           Button turns grey only when the user has deliberately seeked back further. */
-        const atLive = behind <= 30;
-        ui.btnLive.classList.toggle('at-live', atLive);
+        /* Use YouTube's own isAtLiveHead() via bridge (polled every 2 s).
+           Fall back to seekable math only when bridge hasn't returned yet. */
+        ui.btnLive.classList.toggle('at-live', lastLiveHeadAtLive);
+        scheduleLiveHeadPoll();
         return;
       }
 
@@ -1091,6 +1124,7 @@
           video, ui, bridgeCall,
           cachedChapters, loadChapters,
           syncPlayBtn, syncVolBtn, updateProgress,
+          isLiveStream,
           onPipClosed: () => { pipWindow = null; pipCleanup = null; syncPipBtn(); },
         });
         pipWindow = result.pipWindow;
@@ -1183,6 +1217,8 @@
       clearInterval(metaInterval);
       clearInterval(liveCheckInterval);
       clearTimeout(hideTimeout);
+      clearTimeout(liveHeadPollTimer);
+      liveHeadPollTimer = null;
       cleanupMediaSession?.();
       video.removeEventListener('timeupdate', updateProgress);
       video.removeEventListener('loadedmetadata', updateProgress);

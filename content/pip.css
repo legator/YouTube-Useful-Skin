@@ -129,6 +129,16 @@ video { width: 100%; flex: 1; object-fit: contain; background: #000; }
 .pip-btn-chap:hover { opacity: 1; }
 .pip-btn-chap svg { width: 18px; height: 18px; fill: currentColor; }
 
+/* Live button */
+.pip-btn-live {
+  display: none; align-items: center; border: none; border-radius: 3px;
+  background: rgba(255,255,255,0.25); color: #fff; font-size: 10px; font-weight: 700;
+  letter-spacing: 0.6px; padding: 3px 7px; height: 20px; cursor: pointer;
+  transition: background 0.15s ease; white-space: nowrap;
+}
+.pip-btn-live.at-live { background: #e53935; cursor: default; }
+.pip-btn-live:hover:not(.at-live) { background: rgba(255,255,255,0.38); }
+
 .pip-menu {
   position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%);
   min-width: 150px; max-height: 220px; background: rgba(15,15,15,0.95);
