@@ -10,26 +10,61 @@
   /* Bridge client — singleton, persists across SPA navigations */
   let bridgeMsgId = 0;
   const bridgeCallbacks = new Map();
+  
+  /* Generate a unique nonce for secure bridge communication */
+  const bridgeNonce = (typeof crypto !== 'undefined' && crypto.randomUUID) 
+    ? crypto.randomUUID() 
+    : 'nonce-' + Date.now() + '-' + Math.random().toString(36).substring(2);
 
   let _bridgeReadyResolve;
   const bridgeReady = new Promise(res => { _bridgeReadyResolve = res; });
-  /* Fallback: resolve after 5 s so per-call timeouts can handle failures */
+  
+  /* Fallback: resolve after timeout so per-call timeouts can handle failures */
+  /* Use hardcoded value since TIMING not imported yet */
   setTimeout(() => _bridgeReadyResolve(), 5000);
 
   window.addEventListener('message', (e) => {
+    /* Security: Validate message origin, structure, and nonce */
     if (e.source !== window) return;
-    if (e.data?.source === 'ytp-skin-bridge-ready') { _bridgeReadyResolve(); return; }
-    if (!e.data || e.data.source !== 'ytp-skin-response') return;
+    if (!e.data || typeof e.data !== 'object') return;
+    
+    if (e.data.source === 'ytp-skin-bridge-ready') {
+      /* Validate nonce if available */
+      if (bridgeNonce && e.data.nonce && e.data.nonce !== bridgeNonce) {
+        console.warn('[YTP-Skin] Bridge nonce mismatch');
+        return;
+      }
+      _bridgeReadyResolve(); 
+      return; 
+    }
+    
+    if (e.data.source !== 'ytp-skin-response') return;
+    /* Validate nonce if available */
+    if (bridgeNonce && e.data.nonce && e.data.nonce !== bridgeNonce) {
+      console.warn('[YTP-Skin] Response nonce mismatch');
+      return;
+    }
+    
     const cb = bridgeCallbacks.get(e.data.id);
-    if (cb) { bridgeCallbacks.delete(e.data.id); cb(e.data.data); }
+    if (cb) { 
+      bridgeCallbacks.delete(e.data.id); 
+      cb(e.data.data); 
+    }
   });
 
   function bridgeCall(action, payload) {
     return bridgeReady.then(() => new Promise((resolve) => {
       const id = ++bridgeMsgId;
       bridgeCallbacks.set(id, resolve);
-      window.postMessage({ source: 'ytp-skin-request', action, payload, id }, '*');
-      setTimeout(() => { if (bridgeCallbacks.has(id)) { bridgeCallbacks.delete(id); resolve(null); } }, 2000);
+      window.postMessage({ source: 'ytp-skin-request', action, payload, id, nonce: bridgeNonce }, '*');
+      /* Timeout protection - use hardcoded value since TIMING not imported yet */
+      setTimeout(() => { 
+        if (bridgeCallbacks.has(id)) { 
+          bridgeCallbacks.delete(id); 
+          console.warn('[YTP-Skin] Bridge call timeout:', action);
+          resolve(null); 
+        } 
+      }, 2000);
     }));
   }
 
@@ -39,6 +74,8 @@
     s.id = 'ytp-skin-bridge';
     s.type = 'module';
     s.src = chrome.runtime.getURL('content/bridge.js');
+    /* Pass nonce to bridge via data attribute */
+    s.dataset.nonce = bridgeNonce;
     (document.head || document.documentElement).appendChild(s);
   }
   injectBridge();
@@ -48,7 +85,7 @@
   const [
     { ICONS, volIcon },
     { qs, ce, fmtTime },
-    { QUALITY_LABELS, HD_QUALITIES, SPEED_OPTIONS, SKIP_SECONDS },
+    { QUALITY_LABELS, HD_QUALITIES, SPEED_OPTIONS, SKIP_SECONDS, TIMING },
     { buildSkin, attachSeekDrag, renderCCItems, renderQualityItems },
     { parseStoryboardSpec, storyboardUrl, storyboardFrame },
     { openDocumentPip, openBasicPip },
@@ -103,23 +140,35 @@
     const ui = buildSkin();
     player.appendChild(ui.topBar);
     player.appendChild(ui.bottomBar);
+    player.appendChild(ui.clickOverlay);
     skinInjected = true;
 
     /* ---- metadata ---- */
+    let lastMetaHash = '';
     function updateMeta() {
       try {
         const titleText = qs('#title h1 yt-formatted-string, #info-contents h1 yt-formatted-string, h1.ytd-watch-metadata yt-formatted-string');
-        ui.titleEl.textContent = titleText ? titleText.textContent.trim() : '';
-
         const channelText = qs('#owner #channel-name a, ytd-video-owner-renderer #channel-name a, #upload-info #channel-name a');
-        ui.channelEl.textContent = channelText ? channelText.textContent.trim() : '';
-
         const viewInfo = qs('#info-text #info span, ytd-watch-metadata #info span, #info-strings yt-formatted-string');
-        ui.viewsEl.textContent = viewInfo ? viewInfo.textContent.trim() : '';
-      } catch (_) { /* ignore */ }
+        
+        const title = titleText ? titleText.textContent.trim() : '';
+        const channel = channelText ? channelText.textContent.trim() : '';
+        const views = viewInfo ? viewInfo.textContent.trim() : '';
+        
+        /* Only update DOM if content actually changed (performance optimization) */
+        const metaHash = JSON.stringify([title, channel, views]);
+        if (metaHash !== lastMetaHash) {
+          ui.titleEl.textContent = title;
+          ui.channelEl.textContent = channel;
+          ui.viewsEl.textContent = views;
+          lastMetaHash = metaHash;
+        }
+      } catch (err) { 
+        console.warn('[YTP-Skin] Metadata update failed:', err);
+      }
     }
     updateMeta();
-    const metaInterval = setInterval(updateMeta, 2000);
+    const metaInterval = setInterval(updateMeta, TIMING.METADATA_UPDATE_INTERVAL);
 
     /* ---- time & progress updates ---- */
     function updateProgress() {
@@ -148,6 +197,9 @@
       /* current chapter name */
       const activeChap = getChapterAtTime(cur);
       ui.chapNameEl.textContent = activeChap ? activeChap.title : '';
+
+      /* Update chapter menu highlight if visible */
+      updateChapterMenuHighlight();
     }
     video.addEventListener('timeupdate', updateProgress);
     video.addEventListener('loadedmetadata', updateProgress);
@@ -162,6 +214,7 @@
     /* ---- Storyboard thumbnail preview helpers ---- */
     let storyboardData = null;
     const storyboardImageCache = new Map(); /* Cache loaded images for performance */
+    let lastHover = null; /* Last hover position for re-triggering preview after image load */
 
     async function loadStoryboard() {
       if (storyboardData) return; /* Already loaded successfully */
@@ -174,23 +227,31 @@
           /* Verify URL is reachable before committing */
           const testUrl = storyboardUrl(parsed, 0);
           const img = new Image();
-          img.onload = () => { 
+          img.onload = () => {
             storyboardData = parsed;
             storyboardImageCache.set(testUrl, 'loaded');
+            /* Re-trigger preview if user is already hovering over seek bar */
+            if (lastHover) updateSeekPreview(lastHover.pct, lastHover.time);
           };
           img.onerror = () => { 
+            console.warn('[YTP-Skin] Storyboard sheet 0 failed to load — URL may be expired:', testUrl);
             storyboardData = parsed;
             storyboardImageCache.set(testUrl, 'loaded');
+            if (lastHover) updateSeekPreview(lastHover.pct, lastHover.time);
           };
           img.src = testUrl;
           return; /* Done — onload/onerror will finalise */
+        } else {
+          console.warn('[YTP-Skin] parseStoryboardSpec returned null — spec may be malformed:', result.spec.slice(0, 200));
         }
+      } else {
+        console.warn('[YTP-Skin] No spec in result — retry', storyboardRetries + 1);
       }
 
       /* Spec not available yet — schedule a retry (up to 5 attempts) */
       storyboardRetries++;
       if (storyboardRetries < 5) {
-        setTimeout(loadStoryboard, 3000);
+        setTimeout(loadStoryboard, TIMING.STORYBOARD_RETRY_DELAY);
       }
     }
 
@@ -201,8 +262,15 @@
       if (storyboardImageCache.has(url)) return;
       storyboardImageCache.set(url, 'loading');
       const img = new Image();
-      img.onload = () => storyboardImageCache.set(url, 'loaded');
-      img.onerror = () => storyboardImageCache.delete(url);
+      img.onload = () => {
+        storyboardImageCache.set(url, 'loaded');
+        /* Re-trigger preview if user is still hovering over seek bar */
+        if (lastHover) updateSeekPreview(lastHover.pct, lastHover.time);
+      };
+      img.onerror = () => {
+        console.warn('[YTP-Skin] Sheet failed to load:', url);
+        storyboardImageCache.set(url, 'failed'); /* Mark as failed to prevent infinite retries */
+      };
       img.src = url;
     }
 
@@ -223,26 +291,41 @@
       }
       /* Only show preview if image is loaded or loading */
       const cacheStatus = storyboardImageCache.get(frame.url);
-      if (cacheStatus) {
+      if (cacheStatus === 'loaded') {
+        /* Target display size for the preview popup */
+        const TARGET_W = 160;
+        const TARGET_H = 90;
+        const scale = Math.min(TARGET_W / frame.w, TARGET_H / frame.h);
+
         ui.seekPreviewImg.style.backgroundImage = `url("${frame.url}")`;
         ui.seekPreviewImg.style.backgroundPosition = `-${frame.x}px -${frame.y}px`;
         ui.seekPreviewImg.style.backgroundSize = `${frame.cols * frame.w}px ${frame.rows * frame.h}px`;
         ui.seekPreviewImg.style.width = frame.w + 'px';
         ui.seekPreviewImg.style.height = frame.h + 'px';
+        ui.seekPreviewImg.style.transform = `scale(${scale})`;
+        ui.seekPreviewImg.style.transformOrigin = 'top left';
+        ui.seekPreview.style.width = Math.round(frame.w * scale) + 'px';
+        ui.seekPreview.style.height = Math.round(frame.h * scale) + 'px';
+        ui.seekPreview.style.overflow = 'hidden';
         /* Position horizontally, clamped to seek area */
         let left = pct * 100;
         ui.seekPreview.style.left = left + '%';
         ui.seekPreview.classList.add('visible');
+      } else {
+        ui.seekPreview.classList.remove('visible');
       }
     }
 
-    /* Load storyboard early */
-    setTimeout(loadStoryboard, 2000);
+    /* Load storyboard early — use a short delay so player response is available */
+    setTimeout(loadStoryboard, 500);
     function onStoryboardLoadedData() {
       /* Reset for new video */
       storyboardData = null;
       storyboardRetries = 0;
-      setTimeout(loadStoryboard, 1500);
+      storyboardImageCache.clear(); /* Clear cached images from previous video */
+      ui.seekPreview.classList.remove('visible'); /* Hide any showing preview */
+      lastHover = null;
+      setTimeout(loadStoryboard, TIMING.STORYBOARD_RELOAD_DELAY);
     }
     video.addEventListener('loadeddata', onStoryboardLoadedData);
 
@@ -253,6 +336,7 @@
       let pct = (e.clientX - rect.left) / rect.width;
       pct = Math.max(0, Math.min(1, pct));
       const hoverTime = pct * (video.duration || 0);
+      lastHover = { pct, time: hoverTime };
       const chapter = getChapterAtTime(hoverTime);
       const timeStr = fmtTime(hoverTime);
       ui.seekTooltip.textContent = chapter ? `${timeStr} • ${chapter.title}` : timeStr;
@@ -263,6 +347,14 @@
     ui.seekArea.addEventListener('mousemove', handleSeekMouseMove);
 
     ui.seekArea.addEventListener('mouseleave', () => {
+      lastHover = null;
+      ui.seekPreview.classList.remove('visible');
+    });
+
+    /* Also hide preview when mouse leaves the entire bottom bar
+       (preview popup extends above the seek area so seekArea mouseleave isn't always triggered) */
+    ui.bottomBar.addEventListener('mouseleave', () => {
+      lastHover = null;
       ui.seekPreview.classList.remove('visible');
     });
 
@@ -284,6 +376,12 @@
     video.addEventListener('pause', syncPlayBtn);
     syncPlayBtn();
 
+    /* Click on video area (overlay) to toggle play/pause */
+    ui.clickOverlay.addEventListener('click', () => {
+      closeAllMenus();
+      if (video.paused) video.play(); else video.pause();
+    });
+
     ui.btnPlay.addEventListener('click', () => {
       if (video.paused) video.play(); else video.pause();
     });
@@ -297,9 +395,15 @@
     const vid = getVideoId();
     if (vid) {
       chrome.storage.local.get([`volume_${vid}`, `muted_${vid}`], (r) => {
+        if (chrome.runtime.lastError) {
+          console.warn('[YTP-Skin] Storage error:', chrome.runtime.lastError);
+          return;
+        }
         const savedVol = r[`volume_${vid}`];
         const savedMuted = r[`muted_${vid}`];
-        if (typeof savedVol === 'number') video.volume = savedVol;
+        if (typeof savedVol === 'number' && savedVol >= 0 && savedVol <= 1) {
+          video.volume = savedVol;
+        }
         if (typeof savedMuted === 'boolean') video.muted = savedMuted;
       });
     }
@@ -321,7 +425,7 @@
             [`muted_${currentVid}`]: video.muted
           });
         }
-      }, 500);
+      }, TIMING.VOLUME_SAVE_DEBOUNCE);
     }
     video.addEventListener('volumechange', syncVolBtn);
     syncVolBtn();
@@ -443,7 +547,7 @@
       renderQualityItems(
         ui.hdMenuList, document, 'ytp-skin-menu-item', 'ytp-skin-menu-check', 'ytp-skin-hd-tag',
         result.levels, result.current, result.qualityData,
-        (q) => { bridgeCall('setQuality', { quality: q }); setTimeout(updateQualityBadge, 500); closeAllMenus(); }
+        (q) => { bridgeCall('setQuality', { quality: q }); setTimeout(updateQualityBadge, TIMING.QUALITY_UPDATE_DELAY); closeAllMenus(); }
       );
     }
 
@@ -475,11 +579,6 @@
     function syncSpeedBadge() {
       const rate = video.playbackRate || 1;
       ui.badgeSpeed.textContent = rate === 1 ? '1x' : rate + 'x';
-      if (rate !== 1) {
-        ui.badgeSpeed.classList.add('active');
-      } else {
-        ui.badgeSpeed.classList.remove('active');
-      }
     }
 
     function buildSpeedMenu() {
@@ -511,6 +610,8 @@
       customInput.step = '0.05';
       customInput.value = current;
       customInput.title = 'Enter custom speed (0.1–16)';
+      const initialValue = customInput.value;
+      
       const customApply = ce('button', 'ytp-skin-speed-apply', 'Set');
       const applyCustomSpeed = () => {
         let val = parseFloat(customInput.value);
@@ -520,6 +621,16 @@
         syncSpeedBadge();
         closeAllMenus();
       };
+      
+      /* Highlight input when value is modified */
+      customInput.addEventListener('input', () => {
+        if (customInput.value !== initialValue) {
+          customInput.classList.add('modified');
+        } else {
+          customInput.classList.remove('modified');
+        }
+      });
+      
       customApply.addEventListener('click', (e) => { e.stopPropagation(); applyCustomSpeed(); });
       customInput.addEventListener('keydown', (e) => {
         e.stopPropagation();
@@ -545,12 +656,25 @@
 
     /* Persist speed per video ID */
     function getVideoId() {
-      return new URLSearchParams(location.search).get('v') || '';
+      try {
+        const vid = new URLSearchParams(location.search).get('v') || '';
+        /* Basic validation - YouTube video IDs are 11 chars, alphanumeric + - and _ */
+        if (vid && /^[a-zA-Z0-9_-]{11}$/.test(vid)) {
+          return vid;
+        }
+        return '';
+      } catch (err) {
+        console.warn('[YTP-Skin] getVideoId failed:', err);
+        return '';
+      }
     }
     video.addEventListener('ratechange', () => {
       const vid = getVideoId();
       if (!vid) return;
-      chrome.storage.local.set({ [`speed_${vid}`]: video.playbackRate });
+      const rate = video.playbackRate;
+      if (typeof rate === 'number' && rate >= 0.1 && rate <= 16) {
+        chrome.storage.local.set({ [`speed_${vid}`]: rate });
+      }
     });
     /* Restore speed when a new video loads */
     video.addEventListener('loadedmetadata', () => {
@@ -566,6 +690,9 @@
 
     /* ---- Chapters / Timecodes menu ---- */
     let cachedChapters = [];
+    let lastActiveChapterIdx = -1; /* Track active chapter for efficient updates */
+    let userInteractingWithMenu = false; /* Track if user is scrolling/browsing menu */
+    let menuInteractionTimer = null;
 
     async function loadChapters() {
       const result = await bridgeCall('getChapters', {});
@@ -594,6 +721,7 @@
 
       const dur = video.duration || 0;
       const currentTime = video.currentTime || 0;
+      let activeItem = null;
 
       chapters.forEach((ch, idx) => {
         const item = ce('div', 'ytp-skin-menu-item ytp-skin-chap-item');
@@ -608,26 +736,108 @@
         const titleSpan = ce('span', 'ytp-skin-chap-title');
         titleSpan.textContent = ch.title;
         item.append(timeSpan, titleSpan);
-        if (isActive) item.classList.add('active');
+        if (isActive) {
+          item.classList.add('active');
+          activeItem = item;
+          lastActiveChapterIdx = idx;
+        }
 
         item.addEventListener('click', (e) => {
+          e.preventDefault();
           e.stopPropagation();
           video.currentTime = ch.startTime;
           if (!chapPinned) closeAllMenus();
         });
         ui.chapMenuList.append(item);
       });
+
+      /* Scroll to active chapter — use scrollTop to avoid scrollIntoView scrolling the page */
+      if (activeItem) {
+        requestAnimationFrame(() => {
+          const menuRect = ui.chapMenu.getBoundingClientRect();
+          const itemRect = activeItem.getBoundingClientRect();
+          const offset = itemRect.top - menuRect.top - (ui.chapMenu.clientHeight - itemRect.height) / 2;
+          ui.chapMenu.scrollTop = Math.max(0, ui.chapMenu.scrollTop + offset);
+        });
+      }
+    }
+
+    /* Track user interaction with chapter menu */
+    function onChapterMenuInteraction() {
+      userInteractingWithMenu = true;
+      clearTimeout(menuInteractionTimer);
+      menuInteractionTimer = setTimeout(() => {
+        userInteractingWithMenu = false;
+      }, 2000); /* User hasn't interacted for 2s */
+    }
+
+    /* Update chapter menu highlighting when time changes (optimized) */
+    function updateChapterMenuHighlight() {
+      if (!ui.chapMenu.classList.contains('visible')) return;
+
+      const cur = video.currentTime;
+      if (!Number.isFinite(cur)) return;
+      const chapters = cachedChapters;
+      if (chapters.length === 0) return;
+
+      /* Find current active chapter index (reverse search for efficiency) */
+      let activeIdx = -1;
+      for (let i = chapters.length - 1; i >= 0; i--) {
+        if (cur >= chapters[i].startTime) {
+          activeIdx = i;
+          break;
+        }
+      }
+
+      /* Only update DOM if the active chapter has changed */
+      if (activeIdx === lastActiveChapterIdx) return;
+
+      const items = ui.chapMenuList.querySelectorAll('.ytp-skin-chap-item');
+      const targetItem = items[activeIdx];
+      const currentActive = items[lastActiveChapterIdx];
+
+      /* Update highlights */
+      if (currentActive) currentActive.classList.remove('active');
+      if (targetItem) {
+        targetItem.classList.add('active');
+        
+        /* Only auto-scroll if user is not interacting and item is out of viewport */
+        if (!userInteractingWithMenu) {
+          const menuRect = ui.chapMenuList.getBoundingClientRect();
+          const itemRect = targetItem.getBoundingClientRect();
+          const isOutOfView = itemRect.top < menuRect.top || itemRect.bottom > menuRect.bottom;
+          
+          if (isOutOfView) {
+            requestAnimationFrame(() => {
+              const prefersReducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+              const scrollBehavior = prefersReducedMotion ? 'auto' : 'smooth';
+              targetItem.scrollIntoView({ behavior: scrollBehavior, block: 'center' });
+            });
+          }
+        }
+      }
+
+      lastActiveChapterIdx = activeIdx;
     }
 
     ui.btnChapters.addEventListener('click', (e) => {
+      e.preventDefault();
       e.stopPropagation();
       const isOpen = ui.chapMenu.classList.contains('visible');
       closeAllMenus();
       if (!isOpen) {
+        lastActiveChapterIdx = -1; /* Reset cache when opening menu */
+        userInteractingWithMenu = false; /* Reset interaction state */
         buildChaptersMenu();
         ui.chapMenu.classList.add('visible');
       }
+      return false;
     });
+
+    /* Wire up interaction tracking for chapter menu */
+    ui.chapMenuList.addEventListener('scroll', onChapterMenuInteraction, { passive: true });
+    ui.chapMenuList.addEventListener('mouseenter', onChapterMenuInteraction);
+    ui.chapMenuList.addEventListener('touchstart', onChapterMenuInteraction, { passive: true });
 
     /* ---- Chapter menu pin + drag ---- */
     function unpinChapMenu() {
@@ -725,6 +935,7 @@
 
     /* Load chapters on init and render markers */
     async function initChapters() {
+      lastActiveChapterIdx = -1; /* Reset cache on new video */
       const chapters = await loadChapters();
       const hasChap = chapters.length > 0;
       if (hasChap) {
@@ -739,8 +950,8 @@
       }
     }
     /* Delay a bit to ensure player response is available */
-    setTimeout(initChapters, 1500);
-    const onLoadedDataInitChapters = () => setTimeout(initChapters, 1000);
+    setTimeout(initChapters, TIMING.CHAPTERS_INIT_DELAY);
+    const onLoadedDataInitChapters = () => setTimeout(initChapters, TIMING.CHAPTERS_RELOAD_DELAY);
     video.addEventListener('loadeddata', onLoadedDataInitChapters);
 
     /* ---- Quality badge label sync ---- */
@@ -759,7 +970,7 @@
       ui.badgeCC.classList.toggle('active', result.captionActive);
     }
     updateQualityBadge();
-    video.addEventListener('loadeddata', () => setTimeout(updateQualityBadge, 1000));
+    video.addEventListener('loadeddata', () => setTimeout(updateQualityBadge, TIMING.QUALITY_BADGE_UPDATE_DELAY));
 
     /* Restore saved CC language for this video */
     async function restoreSavedCC() {
@@ -777,7 +988,7 @@
         }
       });
     }
-    video.addEventListener('loadeddata', () => setTimeout(restoreSavedCC, 1500));
+    video.addEventListener('loadeddata', () => setTimeout(restoreSavedCC, TIMING.CC_RESTORE_DELAY));
 
     /* ---- theater mode ---- */
     ui.btnTheater.addEventListener('click', () => {
@@ -895,7 +1106,7 @@
       clearTimeout(hideTimeout);
       hideTimeout = setTimeout(() => {
         if (!video.paused) player.classList.remove('ytp-skin-controls-visible');
-      }, 3000);
+      }, TIMING.CONTROLS_HIDE_DELAY);
     }
     const onPlayerMouseLeave = () => {
       clearTimeout(hideTimeout);
@@ -910,7 +1121,7 @@
     /* keep controls visible while paused */
     const onVideoPause = () => player.classList.add('ytp-skin-controls-visible');
     const onVideoPlay = () => {
-      hideTimeout = setTimeout(() => player.classList.remove('ytp-skin-controls-visible'), 3000);
+      hideTimeout = setTimeout(() => player.classList.remove('ytp-skin-controls-visible'), TIMING.CONTROLS_HIDE_DELAY);
     };
     video.addEventListener('pause', onVideoPause);
     video.addEventListener('play', onVideoPlay);
@@ -976,7 +1187,7 @@
   /* Also handle yt-navigate-finish (YouTube custom event) */
   window.addEventListener('yt-navigate-finish', () => {
     skinInjected = false;
-    setTimeout(waitForPlayer, 500);
+    setTimeout(waitForPlayer, TIMING.NAV_DETECT_DELAY);
   });
 
   /* ---- Toggle message from popup ---- */
