@@ -181,36 +181,50 @@
     /* Once confirmed live, stays true for the lifetime of this skin instance */
     let isLiveStream = false;
 
-    function isLive() {
-      /* Primary: HLS live streams have duration === Infinity */
-      if (video.duration === Infinity) return true;
-      /* Fallback: YouTube adds .ytp-live class to the player for live streams */
-      if (player.classList.contains('ytp-live')) return true;
-      /* Fallback: YouTube renders a live badge element when live */
-      if (player.querySelector('.ytp-live-badge, .ytp-live')) return true;
-      return false;
-    }
-
     function updateLiveControls() {
-      const live = isLive();
-      if (live) isLiveStream = true; /* latch — never un-set once confirmed */
+      /* video.duration === Infinity is the definitive HLS live signal */
+      if (!isLiveStream && video.duration === Infinity) isLiveStream = true;
+      /* YouTube sets 'ytp-live' on the player element for live streams */
+      if (!isLiveStream && player.classList.contains('ytp-live')) isLiveStream = true;
       ui.btnSkipBack.style.display = isLiveStream ? 'none' : '';
       ui.btnSkipFwd.style.display = isLiveStream ? 'none' : '';
       ui.btnChapPrev.style.display = isLiveStream ? 'none' : '';
       ui.btnChapNext.style.display = isLiveStream ? 'none' : '';
       ui.btnChapters.style.display = isLiveStream ? 'none' : '';
       ui.btnLive.style.display = isLiveStream ? 'flex' : 'none';
-      /* Initialise button as red (at-live) when we first confirm it's a live stream */
       if (isLiveStream) ui.btnLive.classList.add('at-live');
     }
     video.addEventListener('durationchange', updateLiveControls);
     video.addEventListener('loadedmetadata', updateLiveControls);
-    /* Also re-check periodically for a short window after init in case metadata arrives late */
+
+    /* MutationObserver: watch for YouTube adding 'ytp-live' to the player element.
+       This fires immediately regardless of timing — no polling window to miss. */
+    const liveClassObserver = new MutationObserver(() => {
+      if (!isLiveStream && player.classList.contains('ytp-live')) {
+        isLiveStream = true;
+        updateLiveControls();
+        liveClassObserver.disconnect();
+      }
+    });
+    liveClassObserver.observe(player, { attributes: true, attributeFilter: ['class'] });
+
+    /* Bridge-based live detection via ytP.getVideoData().isLive.
+       Polls every 1 s for up to 10 s in case the YT player initialises slowly
+       (common on SPA navigation where metadata arrives after skin injection).
+       Stops immediately once live is confirmed. The interval is cleaned up in
+       cleanupSkin so it never leaks across SPA navigations. */
     let liveCheckCount = 0;
-    const liveCheckInterval = setInterval(() => {
-      updateLiveControls();
-      if (++liveCheckCount >= 5) clearInterval(liveCheckInterval);
+    const liveCheckInterval = setInterval(async () => {
+      if (isLiveStream) { clearInterval(liveCheckInterval); return; }
+      const result = await bridgeCall('getSyncState', {});
+      if (result?.isLive) {
+        isLiveStream = true;
+        updateLiveControls();
+        clearInterval(liveCheckInterval);
+      }
+      if (++liveCheckCount >= 10) clearInterval(liveCheckInterval);
     }, 1000);
+
     updateLiveControls();
 
     /* ---- time & progress updates ---- */
@@ -306,7 +320,7 @@
 
     async function loadStoryboard() {
       if (storyboardData) return; /* Already loaded successfully */
-      if (isLive()) return; /* Live streams have no storyboard */
+      if (isLiveStream) return; /* Live streams have no storyboard */
 
       const result = await bridgeCall('getStoryboard', {});
 
@@ -1215,6 +1229,7 @@
     cleanupSkin = function () {
       skinInjected = false;
       clearInterval(metaInterval);
+      liveClassObserver.disconnect();
       clearInterval(liveCheckInterval);
       clearTimeout(hideTimeout);
       clearTimeout(liveHeadPollTimer);
