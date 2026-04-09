@@ -181,34 +181,42 @@
     /* Once confirmed live, stays true for the lifetime of this skin instance */
     let isLiveStream = false;
 
-    function isLive() {
-      /* Primary: HLS live streams have duration === Infinity */
-      if (video.duration === Infinity) return true;
-      /* Fallback: YouTube adds .ytp-live class to the player element for live streams */
-      if (player.classList.contains('ytp-live')) return true;
-      return false;
-    }
-
     function updateLiveControls() {
-      const live = isLive();
-      if (live) isLiveStream = true; /* latch — never un-set once confirmed */
+      /* video.duration === Infinity is the definitive HLS live signal */
+      if (!isLiveStream && video.duration === Infinity) isLiveStream = true;
+      /* YouTube sets 'ytp-live' on the player element for live streams */
+      if (!isLiveStream && player.classList.contains('ytp-live')) isLiveStream = true;
       ui.btnSkipBack.style.display = isLiveStream ? 'none' : '';
       ui.btnSkipFwd.style.display = isLiveStream ? 'none' : '';
       ui.btnChapPrev.style.display = isLiveStream ? 'none' : '';
       ui.btnChapNext.style.display = isLiveStream ? 'none' : '';
       ui.btnChapters.style.display = isLiveStream ? 'none' : '';
       ui.btnLive.style.display = isLiveStream ? 'flex' : 'none';
-      /* Initialise button as red (at-live) when we first confirm it's a live stream */
       if (isLiveStream) ui.btnLive.classList.add('at-live');
     }
     video.addEventListener('durationchange', updateLiveControls);
     video.addEventListener('loadedmetadata', updateLiveControls);
-    /* Also re-check periodically for a short window after init in case metadata arrives late */
-    let liveCheckCount = 0;
-    const liveCheckInterval = setInterval(() => {
-      updateLiveControls();
-      if (++liveCheckCount >= 5) clearInterval(liveCheckInterval);
-    }, 1000);
+
+    /* MutationObserver: watch for YouTube adding 'ytp-live' to the player element.
+       This fires immediately regardless of timing — no polling window to miss. */
+    const liveClassObserver = new MutationObserver(() => {
+      if (!isLiveStream && player.classList.contains('ytp-live')) {
+        isLiveStream = true;
+        updateLiveControls();
+        liveClassObserver.disconnect();
+      }
+    });
+    liveClassObserver.observe(player, { attributes: true, attributeFilter: ['class'] });
+
+    /* Bridge check: ytP.getDuration() === Infinity is authoritative for streams
+       where the HLS metadata or ytp-live class arrive after our observer window.
+       Runs once, 2 s after init, only if not already confirmed live. */
+    const liveCheckTimer = setTimeout(async () => {
+      if (isLiveStream) return;
+      const result = await bridgeCall('getSyncState', {});
+      if (result?.isLive) { isLiveStream = true; updateLiveControls(); }
+    }, 2000);
+
     updateLiveControls();
 
     /* ---- time & progress updates ---- */
@@ -1213,7 +1221,8 @@
     cleanupSkin = function () {
       skinInjected = false;
       clearInterval(metaInterval);
-      clearInterval(liveCheckInterval);
+      liveClassObserver.disconnect();
+      clearTimeout(liveCheckTimer);
       clearTimeout(hideTimeout);
       clearTimeout(liveHeadPollTimer);
       liveHeadPollTimer = null;
