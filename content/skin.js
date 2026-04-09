@@ -184,10 +184,8 @@
     function isLive() {
       /* Primary: HLS live streams have duration === Infinity */
       if (video.duration === Infinity) return true;
-      /* Fallback: YouTube adds .ytp-live class to the player for live streams */
+      /* Fallback: YouTube adds .ytp-live class to the player element for live streams */
       if (player.classList.contains('ytp-live')) return true;
-      /* Fallback: YouTube renders a live badge element when live */
-      if (player.querySelector('.ytp-live-badge, .ytp-live')) return true;
       return false;
     }
 
