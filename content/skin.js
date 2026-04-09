@@ -208,14 +208,22 @@
     });
     liveClassObserver.observe(player, { attributes: true, attributeFilter: ['class'] });
 
-    /* Bridge check: ytP.getDuration() === Infinity is authoritative for streams
-       where the HLS metadata or ytp-live class arrive after our observer window.
-       Runs once, 2 s after init, only if not already confirmed live. */
-    const liveCheckTimer = setTimeout(async () => {
-      if (isLiveStream) return;
+    /* Bridge-based live detection via ytP.getVideoData().isLive.
+       Polls every 1 s for up to 10 s in case the YT player initialises slowly
+       (common on SPA navigation where metadata arrives after skin injection).
+       Stops immediately once live is confirmed. The interval is cleaned up in
+       cleanupSkin so it never leaks across SPA navigations. */
+    let liveCheckCount = 0;
+    const liveCheckInterval = setInterval(async () => {
+      if (isLiveStream) { clearInterval(liveCheckInterval); return; }
       const result = await bridgeCall('getSyncState', {});
-      if (result?.isLive) { isLiveStream = true; updateLiveControls(); }
-    }, 2000);
+      if (result?.isLive) {
+        isLiveStream = true;
+        updateLiveControls();
+        clearInterval(liveCheckInterval);
+      }
+      if (++liveCheckCount >= 10) clearInterval(liveCheckInterval);
+    }, 1000);
 
     updateLiveControls();
 
@@ -312,7 +320,7 @@
 
     async function loadStoryboard() {
       if (storyboardData) return; /* Already loaded successfully */
-      if (isLive()) return; /* Live streams have no storyboard */
+      if (isLiveStream) return; /* Live streams have no storyboard */
 
       const result = await bridgeCall('getStoryboard', {});
 
@@ -1222,7 +1230,7 @@
       skinInjected = false;
       clearInterval(metaInterval);
       liveClassObserver.disconnect();
-      clearTimeout(liveCheckTimer);
+      clearInterval(liveCheckInterval);
       clearTimeout(hideTimeout);
       clearTimeout(liveHeadPollTimer);
       liveHeadPollTimer = null;

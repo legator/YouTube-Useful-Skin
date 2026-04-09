@@ -15,8 +15,14 @@ export function getSyncState(ytP, payload, reply) {
     }
   } catch (_) {}
   try {
-    /* ytP.getDuration() returns Infinity for live streams — authoritative source */
-    if (ytP && typeof ytP.getDuration === 'function') {
+    /* getVideoData().isLive is the authoritative API flag — set by YouTube's own
+       player code regardless of stream protocol (HLS or DASH). */
+    if (ytP && typeof ytP.getVideoData === 'function') {
+      const vd = ytP.getVideoData();
+      isLive = vd?.isLive === true;
+    }
+    /* Fallback: getDuration() === Infinity works for HLS live but not always DASH */
+    if (!isLive && ytP && typeof ytP.getDuration === 'function') {
       isLive = ytP.getDuration() === Infinity;
     }
   } catch (_) {}
