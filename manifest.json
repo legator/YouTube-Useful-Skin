@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "YouTube Custom Player Skin",
   "description": "Applies a custom cinematic skin to the YouTube video player with centered controls and a sleek dark overlay.",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "permissions": ["activeTab", "storage"],
   "icons": {
     "16": "icons/icon16.png",
