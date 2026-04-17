@@ -6,6 +6,22 @@ function extractSpec(pr) {
 export function getStoryboard(ytP, payload, reply) {
   let spec = null;
   let method = null;
+  let isLive = false;
+
+  /* Check if this is a live stream — live streams never have storyboard specs */
+  try {
+    if (ytP && typeof ytP.getVideoData === 'function') {
+      isLive = ytP.getVideoData()?.isLive === true;
+    }
+    if (!isLive && ytP && typeof ytP.getDuration === 'function') {
+      isLive = ytP.getDuration() === Infinity;
+    }
+  } catch (_) {}
+
+  if (isLive) {
+    reply({ spec: null, isLive: true });
+    return;
+  }
 
   /* Method 1: YouTube player API — getPlayerResponse() */
   try {

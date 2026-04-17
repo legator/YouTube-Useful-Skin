@@ -42,6 +42,16 @@ export function buildSkin() {
   ccMenu.append(ccMenuTitle, ccMenuList);
   ccWrap.append(badgeCC, ccMenu);
 
+  /* -- audio language button + menu -- */
+  const langWrap = ce('div', 'ytp-skin-menu-wrap');
+  const badgeLang = ce('span', 'ytp-skin-badge ytp-skin-badge-lang', ICONS.language);
+  badgeLang.title = 'Audio language';
+  const langMenu = ce('div', 'ytp-skin-menu ytp-skin-lang-menu');
+  const langMenuTitle = ce('div', 'ytp-skin-menu-title', 'Audio Language');
+  const langMenuList = ce('div', 'ytp-skin-menu-list');
+  langMenu.append(langMenuTitle, langMenuList);
+  langWrap.append(badgeLang, langMenu);
+
   /* -- quality button + menu -- */
   const hdWrap = ce('div', 'ytp-skin-menu-wrap');
   const badgeHD = ce('span', 'ytp-skin-badge ytp-skin-badge-hd', '720<sup>HD</sup>');
@@ -106,7 +116,7 @@ export function buildSkin() {
   const btnFS = ce('button', 'ytp-skin-btn ytp-skin-btn-square', ICONS.fullscreen);
   btnFS.title = 'Full screen';
 
-  controls.append(volWrap, ccWrap, hdWrap, speedWrap, chapWrap, btnChapPrev, btnSkipBack, btnPlay, btnSkipFwd, btnChapNext, btnLive, btnTheater, btnMini, btnFS);
+  controls.append(volWrap, ccWrap, langWrap, hdWrap, speedWrap, chapWrap, btnChapPrev, btnSkipBack, btnPlay, btnSkipFwd, btnChapNext, btnLive, btnTheater, btnMini, btnFS);
 
   /* seek / progress row */
   const progressWrap = ce('div', 'ytp-skin-progress-wrap');
@@ -132,6 +142,7 @@ export function buildSkin() {
     titleEl, channelEl, viewsEl,
     btnVol, volPopup, volSliderTrack, volSliderFill, volSliderThumb, volLabel, volWrap,
     badgeCC, ccMenu, ccMenuList,
+    badgeLang, langMenu, langMenuList, langWrap,
     badgeHD, hdMenu, hdMenuList,
     badgeSpeed, speedMenu, speedMenuList,
     btnChapters, chapMenu, chapMenuList, chapMenuHeader, btnChapPin, chapWrap,
@@ -215,6 +226,33 @@ export function renderCCItems(containerEl, doc, itemCls, checkCls, tracks, curre
     checkSpan.innerHTML = ICONS.check;
     const labelSpan = doc.createElement('span');
     labelSpan.textContent = t.displayName || t.languageName || t.languageCode || 'Unknown';
+    item.append(checkSpan, labelSpan);
+    item.addEventListener('click', (e) => { e.stopPropagation(); onSelect(t); });
+    containerEl.append(item);
+  });
+}
+
+/**
+ * Renders audio language menu items into a container element.
+ */
+export function renderAudioItems(containerEl, doc, itemCls, checkCls, tracks, current, onSelect) {
+  if (!tracks?.length) {
+    const noItem = doc.createElement('div');
+    noItem.className = itemCls + ' disabled';
+    noItem.textContent = 'No audio tracks available';
+    containerEl.append(noItem);
+    return;
+  }
+  tracks.forEach((t) => {
+    const item = doc.createElement('div');
+    const label = t.displayName || t.languageCode || t.id || 'Unknown';
+    const isActive = current?.id && t.id && current.id === t.id;
+    item.className = itemCls + (isActive ? ' active' : '');
+    const checkSpan = doc.createElement('span');
+    checkSpan.className = checkCls;
+    checkSpan.innerHTML = ICONS.check;
+    const labelSpan = doc.createElement('span');
+    labelSpan.textContent = label;
     item.append(checkSpan, labelSpan);
     item.addEventListener('click', (e) => { e.stopPropagation(); onSelect(t); });
     containerEl.append(item);

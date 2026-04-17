@@ -101,7 +101,7 @@
     { ICONS, volIcon },
     { qs, ce, fmtTime },
     { QUALITY_LABELS, HD_QUALITIES, SPEED_OPTIONS, SKIP_SECONDS, TIMING },
-    { buildSkin, attachSeekDrag, renderCCItems, renderQualityItems },
+    { buildSkin, attachSeekDrag, renderCCItems, renderQualityItems, renderAudioItems },
     { parseStoryboardSpec, storyboardUrl, storyboardFrame },
     { openDocumentPip, openBasicPip },
     { setupMediaSession },
@@ -321,8 +321,12 @@
     async function loadStoryboard() {
       if (storyboardData) return; /* Already loaded successfully */
       if (isLiveStream) return; /* Live streams have no storyboard */
+      if (!getVideoId()) return; /* Not on a video page — no storyboard to fetch */
 
       const result = await bridgeCall('getStoryboard', {});
+
+      /* Bridge confirmed this is a live stream — abort permanently, no retries */
+      if (result?.isLive) { isLiveStream = true; updateLiveControls(); return; }
 
       if (result && result.spec) {
         const parsed = parseStoryboardSpec(result.spec);
@@ -339,7 +343,7 @@
           img.onerror = () => {
             /* URL expired or unavailable — discard this spec and retry */
             storyboardRetries++;
-            if (storyboardRetries < 5) setTimeout(loadStoryboard, TIMING.STORYBOARD_RETRY_DELAY);
+            if (storyboardRetries < 5 && !isLiveStream) storyboardRetryTimer = setTimeout(loadStoryboard, TIMING.STORYBOARD_RETRY_DELAY);
           };
           img.src = testUrl;
           return; /* Done — onload/onerror will finalise */
@@ -352,12 +356,13 @@
 
       /* Spec not available yet — schedule a retry (up to 5 attempts) */
       storyboardRetries++;
-      if (storyboardRetries < 5) {
-        setTimeout(loadStoryboard, TIMING.STORYBOARD_RETRY_DELAY);
+      if (storyboardRetries < 5 && !isLiveStream) {
+        storyboardRetryTimer = setTimeout(loadStoryboard, TIMING.STORYBOARD_RETRY_DELAY);
       }
     }
 
     let storyboardRetries = 0;
+    let storyboardRetryTimer = null;
 
     /* Lazy load storyboard image with caching */
     function preloadStoryboardImage(url) {
@@ -419,15 +424,16 @@
     }
 
     /* Load storyboard early — use a short delay so player response is available */
-    setTimeout(loadStoryboard, 500);
+    storyboardRetryTimer = setTimeout(loadStoryboard, 500);
     function onStoryboardLoadedData() {
       /* Reset for new video */
       storyboardData = null;
       storyboardRetries = 0;
+      clearTimeout(storyboardRetryTimer);
       storyboardImageCache.clear(); /* Clear cached images from previous video */
       ui.seekPreview.classList.remove('visible'); /* Hide any showing preview */
       lastHover = null;
-      setTimeout(loadStoryboard, TIMING.STORYBOARD_RELOAD_DELAY);
+      storyboardRetryTimer = setTimeout(loadStoryboard, TIMING.STORYBOARD_RELOAD_DELAY);
     }
     video.addEventListener('loadeddata', onStoryboardLoadedData);
 
@@ -611,6 +617,47 @@
       }
     });
 
+    /* ---- Audio language menu ---- */
+    ui.langWrap.style.display = 'none';
+
+    async function buildLangMenu() {
+      ui.langMenuList.innerHTML = '';
+      const loading = ce('div', 'ytp-skin-menu-item disabled');
+      loading.textContent = 'Loading...';
+      ui.langMenuList.append(loading);
+
+      const result = await bridgeCall('getAudioTracks', {});
+      ui.langMenuList.innerHTML = '';
+      if (!result) {
+        const err = ce('div', 'ytp-skin-menu-item disabled');
+        err.textContent = 'Could not load audio tracks';
+        ui.langMenuList.append(err);
+        return;
+      }
+      renderAudioItems(
+        ui.langMenuList, document, 'ytp-skin-menu-item', 'ytp-skin-menu-check',
+        result.tracks, result.current,
+        (t) => { bridgeCall('setAudioTrack', { track: t }); closeAllMenus(); }
+      );
+    }
+
+    ui.badgeLang.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const isOpen = ui.langMenu.classList.contains('visible');
+      closeAllMenus();
+      if (!isOpen) {
+        buildLangMenu();
+        ui.langMenu.classList.add('visible');
+      }
+    });
+
+    async function checkAudioTracks() {
+      const result = await bridgeCall('getAudioTracks', {});
+      ui.langWrap.style.display = (result?.tracks?.length > 1) ? '' : 'none';
+    }
+    setTimeout(checkAudioTracks, TIMING.QUALITY_UPDATE_DELAY);
+    video.addEventListener('loadeddata', () => setTimeout(checkAudioTracks, TIMING.QUALITY_BADGE_UPDATE_DELAY));
+
     /* ---- Quality menu ---- */
     async function buildQualityMenu() {
       ui.hdMenuList.innerHTML = '';
@@ -647,6 +694,7 @@
     let chapPinned = false;
     function closeAllMenus() {
       ui.ccMenu.classList.remove('visible');
+      ui.langMenu.classList.remove('visible');
       ui.hdMenu.classList.remove('visible');
       ui.speedMenu.classList.remove('visible');
       if (!chapPinned) ui.chapMenu.classList.remove('visible');
@@ -1231,6 +1279,8 @@
       clearInterval(metaInterval);
       liveClassObserver.disconnect();
       clearInterval(liveCheckInterval);
+      clearTimeout(storyboardRetryTimer);
+      storyboardRetryTimer = null;
       clearTimeout(hideTimeout);
       clearTimeout(liveHeadPollTimer);
       liveHeadPollTimer = null;

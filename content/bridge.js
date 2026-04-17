@@ -7,6 +7,7 @@
 
 import { getQualities, setQuality }               from './bridge/quality.js';
 import { getCaptions, setCaptions }               from './bridge/captions.js';
+import { getAudioTracks, setAudioTrack }          from './bridge/audioTrack.js';
 import { getSyncState }                           from './bridge/syncState.js';
 import { getStoryboard }                          from './bridge/storyboard.js';
 import { getChapters }                            from './bridge/chapters.js';
@@ -18,6 +19,8 @@ const HANDLERS = {
   setQuality,
   getCaptions,
   setCaptions,
+  getAudioTracks,
+  setAudioTrack,
   getSyncState,
   getStoryboard,
   getChapters,
