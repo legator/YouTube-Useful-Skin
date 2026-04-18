@@ -656,7 +656,8 @@
       ui.langWrap.style.display = (result?.tracks?.length > 1) ? '' : 'none';
     }
     setTimeout(checkAudioTracks, TIMING.QUALITY_UPDATE_DELAY);
-    video.addEventListener('loadeddata', () => setTimeout(checkAudioTracks, TIMING.QUALITY_BADGE_UPDATE_DELAY));
+    const onLoadedDataCheckAudio = () => setTimeout(checkAudioTracks, TIMING.QUALITY_BADGE_UPDATE_DELAY);
+    video.addEventListener('loadeddata', onLoadedDataCheckAudio);
 
     /* ---- Quality menu ---- */
     async function buildQualityMenu() {
@@ -1300,6 +1301,7 @@
       video.removeEventListener('enterpictureinpicture', syncPipBtn);
       video.removeEventListener('leavepictureinpicture', syncPipBtn);
       video.removeEventListener('loadeddata', onLoadedDataInitChapters);
+      video.removeEventListener('loadeddata', onLoadedDataCheckAudio);
       player.removeEventListener('click', docClickHandler);
       player.removeEventListener('mousemove', throttledShowControls);
       player.removeEventListener('mouseenter', showControls);

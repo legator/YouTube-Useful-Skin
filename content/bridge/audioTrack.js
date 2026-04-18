@@ -5,6 +5,17 @@ const KIND_MAP = {
   secondary: 'Secondary',
 };
 
+function readVarint(bin, pos) {
+  let v = 0, shift = 0;
+  while (pos < bin.length) {
+    const b = bin.charCodeAt(pos++);
+    v |= (b & 0x7f) << shift;
+    if (!(b & 0x80)) break;
+    shift += 7;
+  }
+  return [v, pos];
+}
+
 /* Decode the base64-protobuf vssId to extract kind ("original", "descriptive") and lang ("en") */
 function parseVssId(vssId) {
   if (!vssId || typeof vssId !== 'string') return null;
@@ -14,19 +25,20 @@ function parseVssId(vssId) {
     const bin = atob(b64.replace(/-/g, '+').replace(/_/g, '/'));
     let kind = '', lang = '';
     let i = 0;
-    while (i < bin.length - 1) {
-      const tag = bin.charCodeAt(i++);
+    while (i < bin.length) {
+      let tag, fLen;
+      [tag, i] = readVarint(bin, i);
       if ((tag & 7) !== 2) break;
-      const fLen = bin.charCodeAt(i++);
+      [fLen, i] = readVarint(bin, i);
       const chunk = bin.slice(i, i + fLen);
       i += fLen;
-      /* Inner message: field1 = key, field2 = value */
       let key = '', val = '';
       let j = 0;
-      while (j < chunk.length - 1) {
-        const t2 = chunk.charCodeAt(j++);
+      while (j < chunk.length) {
+        let t2, l2;
+        [t2, j] = readVarint(chunk, j);
         if ((t2 & 7) !== 2) break;
-        const l2 = chunk.charCodeAt(j++);
+        [l2, j] = readVarint(chunk, j);
         const s = chunk.slice(j, j + l2);
         j += l2;
         if ((t2 >> 3) === 1) key = s;

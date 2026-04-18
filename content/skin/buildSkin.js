@@ -246,7 +246,7 @@ export function renderAudioItems(containerEl, doc, itemCls, checkCls, tracks, cu
   tracks.forEach((t) => {
     const item = doc.createElement('div');
     const label = t.displayName || t.languageCode || t.id || 'Unknown';
-    const isActive = current?.id && t.id && current.id === t.id;
+    const isActive = !!(t.id && current?.id === t.id);
     item.className = itemCls + (isActive ? ' active' : '');
     const checkSpan = doc.createElement('span');
     checkSpan.className = checkCls;
