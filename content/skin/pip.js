@@ -249,7 +249,8 @@ export async function openDocumentPip({ video, ui, bridgeCall, cachedChapters, l
   pSeek.addEventListener('mouseleave', () => { pTip.style.opacity = '0'; });
   pSeek.addEventListener('mouseenter', () => { pTip.style.opacity = '1'; });
 
-  video.addEventListener('click', () => { if (video.paused) video.play(); else video.pause(); });
+  const onVideoClick = () => { if (video.paused) video.play(); else video.pause(); };
+  video.addEventListener('click', onVideoClick);
 
   /* ── Menus ── */
   function closePipMenus() {
@@ -262,21 +263,33 @@ export async function openDocumentPip({ video, ui, bridgeCall, cachedChapters, l
     return t;
   }
 
+  async function withLoading(menuEl, title, bridgeKey, renderFn) {
+    menuEl.innerHTML = '';
+    menuEl.append(pipMenuTitle(title));
+    const loading = mk('div', 'pip-menu-item disabled');
+    loading.textContent = 'Loading...';
+    menuEl.append(loading);
+    const result = await bridgeCall(bridgeKey, {});
+    menuEl.innerHTML = '';
+    menuEl.append(pipMenuTitle(title));
+    if (!result) {
+      const e = mk('div', 'pip-menu-item disabled');
+      e.textContent = 'Could not load';
+      menuEl.append(e);
+      return;
+    }
+    renderFn(result);
+  }
+
   /* CC */
   async function buildPipCCMenu() {
-    pipCCMenu.innerHTML = '';
-    pipCCMenu.append(pipMenuTitle('Subtitles'));
-    const loading = mk('div', 'pip-menu-item disabled'); loading.textContent = 'Loading...';
-    pipCCMenu.append(loading);
-    const result = await bridgeCall('getCaptions', {});
-    pipCCMenu.innerHTML = '';
-    pipCCMenu.append(pipMenuTitle('Subtitles'));
-    if (!result) { const e = mk('div', 'pip-menu-item disabled'); e.textContent = 'Could not load'; pipCCMenu.append(e); return; }
-    renderCCItems(pipCCMenu, pipWin.document, 'pip-menu-item', 'pip-menu-check',
-      result.tracks, result.current,
-      () => { bridgeCall('setCaptions', { track: {} }); pipCCBadge.classList.remove('active'); closePipMenus(); },
-      (t) => { bridgeCall('setCaptions', { track: t });  pipCCBadge.classList.add('active');    closePipMenus(); }
-    );
+    await withLoading(pipCCMenu, 'Subtitles', 'getCaptions', (result) => {
+      renderCCItems(pipCCMenu, pipWin.document, 'pip-menu-item', 'pip-menu-check',
+        result.tracks, result.current,
+        () => { bridgeCall('setCaptions', { track: {} }); pipCCBadge.classList.remove('active'); closePipMenus(); },
+        (t) => { bridgeCall('setCaptions', { track: t });  pipCCBadge.classList.add('active');    closePipMenus(); }
+      );
+    });
   }
   pipCCBadge.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -287,18 +300,12 @@ export async function openDocumentPip({ video, ui, bridgeCall, cachedChapters, l
 
   /* Audio language */
   async function buildPipLangMenu() {
-    pipLangMenu.innerHTML = '';
-    pipLangMenu.append(pipMenuTitle('Audio Language'));
-    const loading = mk('div', 'pip-menu-item disabled'); loading.textContent = 'Loading...';
-    pipLangMenu.append(loading);
-    const result = await bridgeCall('getAudioTracks', {});
-    pipLangMenu.innerHTML = '';
-    pipLangMenu.append(pipMenuTitle('Audio Language'));
-    if (!result) { const e = mk('div', 'pip-menu-item disabled'); e.textContent = 'Could not load'; pipLangMenu.append(e); return; }
-    renderAudioItems(pipLangMenu, pipWin.document, 'pip-menu-item', 'pip-menu-check',
-      result.tracks, result.current,
-      (t) => { bridgeCall('setAudioTrack', { track: t }); closePipMenus(); }
-    );
+    await withLoading(pipLangMenu, 'Audio Language', 'getAudioTracks', (result) => {
+      renderAudioItems(pipLangMenu, pipWin.document, 'pip-menu-item', 'pip-menu-check',
+        result.tracks, result.current,
+        (t) => { bridgeCall('setAudioTrack', { track: t }); closePipMenus(); }
+      );
+    });
   }
   pipLangBadge.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -307,26 +314,19 @@ export async function openDocumentPip({ video, ui, bridgeCall, cachedChapters, l
     if (!open) { buildPipLangMenu(); pipLangMenu.classList.add('visible'); }
   });
 
-  async function checkPipAudioTracks() {
+  setTimeout(async () => {
     const result = await bridgeCall('getAudioTracks', {});
     pipLangWrap.style.display = (result?.tracks?.length > 1) ? '' : 'none';
-  }
-  setTimeout(checkPipAudioTracks, 600);
+  }, 600);
 
   /* Quality */
   async function buildPipQualityMenu() {
-    pipHDMenu.innerHTML = '';
-    pipHDMenu.append(pipMenuTitle('Quality'));
-    const loading = mk('div', 'pip-menu-item disabled'); loading.textContent = 'Loading...';
-    pipHDMenu.append(loading);
-    const result = await bridgeCall('getQualities', {});
-    pipHDMenu.innerHTML = '';
-    pipHDMenu.append(pipMenuTitle('Quality'));
-    if (!result) { const e = mk('div', 'pip-menu-item disabled'); e.textContent = 'Could not load'; pipHDMenu.append(e); return; }
-    renderQualityItems(pipHDMenu, pipWin.document, 'pip-menu-item', 'pip-menu-check', 'pip-hd-tag',
-      result.levels, result.current, result.qualityData,
-      (q) => { bridgeCall('setQuality', { quality: q }); closePipMenus(); }
-    );
+    await withLoading(pipHDMenu, 'Quality', 'getQualities', (result) => {
+      renderQualityItems(pipHDMenu, pipWin.document, 'pip-menu-item', 'pip-menu-check', 'pip-hd-tag',
+        result.levels, result.current, result.qualityData,
+        (q) => { bridgeCall('setQuality', { quality: q }); closePipMenus(); }
+      );
+    });
   }
   pipHDBadge.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -436,7 +436,8 @@ export async function openDocumentPip({ video, ui, bridgeCall, cachedChapters, l
     }
   });
 
-  video.addEventListener('dblclick', () => closePip());
+  const onVideoDblClick = () => closePip();
+  video.addEventListener('dblclick', onVideoDblClick);
   closeBtn.addEventListener('click', () => closePip());
 
   /* Cleanup */
@@ -445,6 +446,8 @@ export async function openDocumentPip({ video, ui, bridgeCall, cachedChapters, l
     video.removeEventListener('pause',        syncPipPlay);
     video.removeEventListener('volumechange', syncPipVol);
     video.removeEventListener('timeupdate',   syncPipProgress);
+    video.removeEventListener('click',        onVideoClick);
+    video.removeEventListener('dblclick',     onVideoDblClick);
     if (videoNext) videoParent.insertBefore(video, videoNext);
     else           videoParent.appendChild(video);
     video.setAttribute('style', savedStyle);
